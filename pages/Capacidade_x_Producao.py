@@ -1,13 +1,14 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+import numpy as np
 
 st.set_page_config(layout="wide")
 st.title("Capacidade x Produção")
 
 rotulos = st.checkbox("Exibir rótulos", True)
 
-# Fator dinâmico (vol/kg)
+# Sidebar - fator dinâmico
 st.sidebar.header("Configurações")
 fator_dinamico = st.sidebar.number_input(
     "Fator Dinâmico (vol/kg)",
@@ -18,7 +19,9 @@ fator_dinamico = st.sidebar.number_input(
 )
 st.write(f"**Fator atual:** {fator_dinamico:.2f}")
 
-# Dados base (em kg)
+# ==============================
+# Dados base de capacidade
+# ==============================
 dados_capacidade = {
     "Hora": [
         "00:00","01:00","02:00","03:00","04:00","05:00","06:00","07:00",
@@ -33,53 +36,96 @@ dados_capacidade = {
     ]
 }
 
-df = pd.DataFrame(dados_capacidade)
+df_cap = pd.DataFrame(dados_capacidade)
 
-# ---- CONVERSÃO PARA TONELADAS ----
-# Capacidade (kg) * fator / 1000 → resultado em toneladas
-df["Capacidade (t)"] = (df["Capacidade_kg"] * fator_dinamico) / 1000
-df["Capacidade (t)"] = df["Capacidade (t)"].round(1)
+# Converter "Hora" em datetime para interpolação
+df_cap["Hora"] = pd.to_datetime(df_cap["Hora"], format="%H:%M")
 
-# Produção real (em toneladas)
-df["Produção (t)"] = [
-    7, 6, 8, 5, 9, 10, 12, 15, 16, 13, 9, 10, 11, 12, 13, 15, 14, 13, 17, 18, 19, 18, 16, 14
-]
+# Converter Capacidade para toneladas (kg * fator / 1000)
+df_cap["Capacidade (t)"] = (df_cap["Capacidade_kg"] * fator_dinamico) / 1000
+df_cap["Capacidade (t)"] = df_cap["Capacidade (t)"].round(1)
 
-# ---- Gráfico ----
+# Criar eixo contínuo de tempo (a cada 15 minutos para suavizar visual)
+hora_inicio = pd.Timestamp("00:00")
+hora_fim = pd.Timestamp("23:59")
+horas_continuas = pd.date_range(hora_inicio, hora_fim, freq="15min")
+
+# Repetir capacidade como degraus (reta constante até próxima hora)
+df_cap_continua = pd.DataFrame({"Hora": horas_continuas})
+df_cap_continua["Capacidade (t)"] = np.interp(
+    df_cap_continua["Hora"].astype(np.int64),
+    df_cap["Hora"].astype(np.int64),
+    df_cap["Capacidade (t)"]
+)
+
+# ==============================
+# Dados de Produção (fixo ou upload)
+# ==============================
+uploaded_file = st.file_uploader("📂 Envie o arquivo de produção (opcional)", type=["csv", "xlsx"])
+if uploaded_file:
+    if uploaded_file.name.endswith(".csv"):
+        df = pd.read_csv(uploaded_file)
+    else:
+        df = pd.read_excel(uploaded_file)
+else:
+    df = pd.DataFrame({
+        "Hora": [
+            "00:00","01:00","02:00","03:00","04:00","05:00","06:00","07:00",
+            "08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00",
+            "16:00","17:00","18:00","19:00","20:00","21:00","22:00","23:00"
+        ],
+        "Produção (t)": [
+            7, 6, 8, 5, 9, 10, 12, 15, 16, 13, 9, 10, 11, 12, 13, 15, 14, 13, 17, 18, 19, 18, 16, 14
+        ]
+    })
+
+df["Hora"] = pd.to_datetime(df["Hora"], format="%H:%M")
+
+# ==============================
+# Plotly - Gráfico
+# ==============================
 fig = go.Figure()
 
-# Barras (Produção)
+# Barras de Produção
 fig.add_trace(go.Bar(
-    x=df["Hora"], y=df["Produção (t)"],
+    x=df["Hora"].dt.strftime("%H:%M"), y=df["Produção (t)"],
     name="Produção (t)",
     marker_color="#90EE90", opacity=0.85
 ))
 
-# Linha (Capacidade)
+# Linha contínua da Capacidade
 fig.add_trace(go.Scatter(
-    x=df["Hora"], y=df["Capacidade (t)"],
+    x=df_cap_continua["Hora"].dt.strftime("%H:%M"),
+    y=df_cap_continua["Capacidade (t)"],
     name="Capacidade (t)",
-    mode="lines+markers",
-    line=dict(color="#9B59B6", width=4),
-    marker=dict(size=7),
+    mode="lines",
+    line=dict(color="#9B59B6", width=4, shape="hv"),  # "hv" = degrau horizontal
 ))
 
-# ---- Rótulos ----
+# Rótulos (apenas nos pontos horários principais)
 if rotulos:
     for _, r in df.iterrows():
-        fig.add_annotation(x=r["Hora"], y=r["Produção (t)"],
+        fig.add_annotation(
+            x=r["Hora"].strftime("%H:%M"),
+            y=r["Produção (t)"],
             text=f"{r['Produção (t)']:.1f}",
             font=dict(color="#90EE90", size=9),
             bgcolor="white", bordercolor="#90EE90", borderwidth=1,
-            showarrow=False, yshift=10)
-        fig.add_annotation(x=r["Hora"], y=r["Capacidade (t)"],
+            showarrow=False, yshift=10
+        )
+
+    for _, r in df_cap.iterrows():
+        fig.add_annotation(
+            x=r["Hora"].strftime("%H:%M"),
+            y=r["Capacidade (t)"],
             text=f"{r['Capacidade (t)']:.1f}",
             font=dict(color="#9B59B6", size=9),
             bgcolor="white", bordercolor="#9B59B6", borderwidth=1,
-            showarrow=False, yshift=0)
+            showarrow=False, yshift=0
+        )
 
-# ---- Layout ----
-max_y = max(df["Capacidade (t)"].max(), df["Produção (t)"].max()) * 1.1
+# Layout
+max_y = max(df_cap_continua["Capacidade (t)"].max(), df["Produção (t)"].max()) * 1.1
 
 fig.update_layout(
     xaxis_title="Hora",
@@ -94,10 +140,9 @@ fig.update_layout(
 
 st.plotly_chart(fig, use_container_width=True)
 
-# ---- Dados detalhados ----
+# Expander com dados
 with st.expander("📋 Ver dados detalhados"):
-    st.dataframe(df.style.format({
+    st.dataframe(df_cap.style.format({
         "Capacidade_kg": "{:,.1f}",
-        "Capacidade (t)": "{:,.1f}",
-        "Produção (t)": "{:,.1f}"
+        "Capacidade (t)": "{:,.1f}"
     }))
