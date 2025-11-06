@@ -26,26 +26,28 @@ def ler_producao(b, f):
 texto = ler_producao(st.session_state.prod_bytes, padrao_producao)
 
 def extrair(texto):
-    c, s, m = {}, {}, None
+    cheg = {}
+    said = {}
+    modo = None
     for l in texto.strip().split("\n"):
         l = l.strip()
-        if l == "Cheg. Ton.": m = "c"; continue
-        if l == "Saida Ton.": m = "s"; continue
-        if not l or not m: continue
+        if l == "Cheg. Ton.": modo = "cheg"; continue
+        if l == "Saida Ton.": modo = "said"; continue
+        if not l or modo is None: continue
         p = l.split()
         if len(p) < 2: continue
         h = p[0]
         try:
             v = float(p[1].replace(",", "."))
-            if m == "c": c[h] = c.get(h, 0) + v
-            else: s[h] = s.get(h, 0) + v
+            if modo == "cheg": cheg[h] = cheg.get(h, 0) + v
+            else: said[h] = said.get(h, 0) + v
         except: pass
-    return c, s
+    return cheg, said
 
 cheg, said = extrair(texto)
 
-# TODAS AS HORAS UNICAS (equipe + chegadas + saidas)
-todas_horas = set(cheg.keys()) | set(said.keys())
+# TODAS AS HORAS UNICAS (chegadas + saidas + equipe)
+todas = set(cheg.keys()) | set(said.keys())
 
 padrao_conf = "00:00 04:00 05:15 09:33 9\n04:00 09:00 10:15 13:07 27\n04:30 08:30 10:30 15:14 1\n06:00 11:00 12:15 16:03 1\n07:45 12:00 13:15 17:48 1\n08:00 12:00 13:15 18:03 2\n10:00 12:00 14:00 20:48 11\n12:00 16:00 17:15 22:02 8\n13:00 16:00 17:15 22:55 5\n15:45 18:00 18:15 22:00 7\n16:30 19:30 19:45 22:39 2"
 padrao_aux = "00:00 04:00 05:15 09:33 10\n04:00 09:00 10:15 13:07 17\n12:00 16:00 17:15 22:02 2\n13:00 16:00 17:15 22:55 3\n15:45 18:00 18:15 22:00 3\n16:30 19:30 19:45 22:39 2\n17:48 21:48 1\n18:00 22:00 19\n19:00 22:52 5"
@@ -71,9 +73,9 @@ def horarios(jc, ja):
     return sorted(h, key=min)
 
 horas_equipe = horarios(padrao_conf, padrao_aux)
-todas_horas.update(horas_equipe)
-horarios_ordenados = sorted(todas_horas, key=min)
-tl = [min(h) for h in horarios_ordenados]
+todas.update(horas_equipe)
+horarios = sorted(todas, key=min)
+tl = [min(h) for h in horarios]
 eq = [0] * len(tl)
 
 def aplicar(j, lista, tl):
@@ -91,25 +93,32 @@ def aplicar(j, lista, tl):
 for j in jornadas(padrao_conf): aplicar(j, eq, tl)
 for j in jornadas(padrao_aux): aplicar(j, eq, tl)
 
-# PRODUCAO: soma de chegadas - saidas (estoque acumulado por hora)
-acumulado = 0.0
-producao_acumulada = []
-for h in horarios_ordenados:
-    acumulado += cheg.get(h, 0)
-    acumulado -= said.get(h, 0)
-    producao_acumulada.append(round(acumulado, 3))
+# VALORES EXATOS POR HORA (1 casa decimal)
+cheg_val = [round(cheg.get(h, 0), 1) for h in horarios]
+said_val = [round(said.get(h, 0), 1) for h in horarios]
 
 df = pd.DataFrame({
-    "Horario": horarios_ordenados,
-    "Equipe": eq,
-    "Estoque_Ton": producao_acumulada
+    "Horario": horarios,
+    "Chegada_Ton": cheg_val,
+    "Saida_Ton": said_val,
+    "Equipe": eq
 })
 
 fig = go.Figure()
+
+# Barras: Chegada (verde)
 fig.add_trace(go.Bar(
-    x=df["Horario"], y=df["Estoque_Ton"],
-    name="Estoque (ton)", marker_color="#FF6B6B", opacity=0.8
+    x=df["Horario"], y=df["Chegada_Ton"],
+    name="Chegada (ton)", marker_color="#2ECC71", opacity=0.8
 ))
+
+# Barras: Saida (vermelho)
+fig.add_trace(go.Bar(
+    x=df["Horario"], y=-df["Saida_Ton"],  # negativo para baixo
+    name="Saida (ton)", marker_color="#E74C3C", opacity=0.8
+))
+
+# Linha: Equipe
 fig.add_trace(go.Scatter(
     x=df["Horario"], y=df["Equipe"],
     mode="lines+markers", name="Equipe",
@@ -118,18 +127,21 @@ fig.add_trace(go.Scatter(
 
 if rotulos:
     for _, r in df.iterrows():
-        if r["Estoque_Ton"] > 0:
-            fig.add_annotation(x=r["Horario"], y=r["Estoque_Ton"], text=f"<b>{r['Estoque_Ton']}</b>", showarrow=False, font=dict(color="#FF6B6B", size=9), yshift=10)
+        if r["Chegada_Ton"] > 0:
+            fig.add_annotation(x=r["Horario"], y=r["Chegada_Ton"], text=f"<b>{r['Chegada_Ton']}</b>", showarrow=False, font=dict(color="#2ECC71", size=9), yshift=10)
+        if r["Saida_Ton"] > 0:
+            fig.add_annotation(x=r["Horario"], y=-r["Saida_Ton"], text=f"<b>{r['Saida_Ton']}</b>", showarrow=False, font=dict(color="#E74C3C", size=9), yshift=-10)
         if r["Equipe"] > 0:
             fig.add_annotation(x=r["Horario"], y=r["Equipe"], text=f"<b>{int(r['Equipe'])}</b>", showarrow=False, font=dict(color="#4ECDC4", size=9), yshift=10)
 
 fig.update_layout(
     xaxis_title="Horario",
-    yaxis=dict(title="Estoque Acumulado (ton)", side="left"),
-    yaxis2=dict(title="Equipe Disponivel", side="right", overlaying="y"),
+    yaxis=dict(title="Toneladas (Chegada + / Saida -)", side="left"),
+    yaxis2=dict(title="Equipe", side="right", overlaying="y"),
     height=600,
     hovermode="x unified",
-    legend=dict(x=0, y=1.1, orientation="h")
+    legend=dict(x=0, y=1.1, orientation="h"),
+    barmode="relative"
 )
 
 st.plotly_chart(fig, use_container_width=True)
@@ -145,11 +157,11 @@ if st.session_state.prod_name:
 out = io.BytesIO()
 with pd.ExcelWriter(out, engine="openpyxl") as w: df.to_excel(w, index=False)
 out.seek(0)
-st.download_button("Baixar Excel", out, "estoque_vs_equipe.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+st.download_button("Baixar Excel", out, "producao_detalhada.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 if st.session_state.prod_name:
     st.markdown("### Dados Carregados")
     st.code(texto, language="text")
 
 with st.expander("Formato do arquivo"):
-    st.markdown("Cheg. Ton.\n01:00 7,278041\n...\nSaida Ton.\n21:00 6,061068\n- HH:MM valor\n- Virgula ou ponto\n- Multiplas linhas na mesma hora sao somadas")
+    st.markdown("Cheg. Ton.\n01:00 7,278041\n...\nSaida Ton.\n23:45 18,571689\n- HH:MM valor\n- Virgula ou ponto\n- Multiplas linhas somadas")
