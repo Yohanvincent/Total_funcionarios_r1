@@ -69,7 +69,7 @@ with col2:
     if st.button(
         "Capacidade x Produção",
         use_container_width=True,
-        key="btn_prod"
+        key="btn_capac"
     ):
         st.switch_page("pages/Capacidade_x_Producao.py")
 
