@@ -52,7 +52,7 @@ fig = go.Figure()
 fig.add_trace(go.Bar(
     x=df["Hora"], y=df["Produção (t)"],
     name="Produção (t)",
-    marker_color="#E74C3C", opacity=0.85
+    marker_color="#228B22", opacity=0.85
 ))
 
 # Linha (Capacidade)
