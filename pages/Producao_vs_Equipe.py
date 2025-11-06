@@ -102,12 +102,10 @@ df = pd.DataFrame({
     "Equipe": eq
 })
 
-# Calcula limites
 max_cheg = max(cheg_val) if cheg_val else 0
 max_said = max(said_val) if said_val else 0
 max_eq = max(eq) if eq else 0
 
-# Margens
 margem_ton = 5
 margem_eq = 5
 
@@ -118,19 +116,16 @@ y2_max = max_eq + margem_eq
 
 fig = go.Figure()
 
-# Chegada (verde)
 fig.add_trace(go.Bar(
     x=df["Horario"], y=df["Chegada_Ton"],
     name="Chegada (ton)", marker_color="#2ECC71", opacity=0.8
 ))
 
-# Saida (vermelho)
 fig.add_trace(go.Bar(
     x=df["Horario"], y=-df["Saida_Ton"],
     name="Saida (ton)", marker_color="#E74C3C", opacity=0.8
 ))
 
-# Equipe (roxo)
 fig.add_trace(go.Scatter(
     x=df["Horario"], y=df["Equipe"],
     mode="lines+markers", name="Equipe",
@@ -139,7 +134,6 @@ fig.add_trace(go.Scatter(
     yaxis="y2"
 ))
 
-# Rótulos com caixa (igual aos outros gráficos)
 if rotulos:
     for _, r in df.iterrows():
         if r["Chegada_Ton"] > 0:
@@ -188,9 +182,6 @@ fig.update_layout(
     barmode="relative",
     margin=dict(l=60, r=60, t=40, b=60)
 )
-
-# Alinhar zero do y2 com zero do y1
-fig.update_yaxes secondary_y=True, position=1.0)
 
 st.plotly_chart(fig, use_container_width=True)
 
