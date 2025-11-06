@@ -106,11 +106,17 @@ max_cheg = max(cheg_val) if cheg_val else 0
 max_said = max(said_val) if said_val else 0
 max_eq = max(eq) if eq else 0
 
-margem_ton = 5
-margem_eq = 5
+margem = 5
+y_min = -max_said - margem
+y_max = max_cheg + margem
 
-y_min = -max_said - margem_ton
-y_max = max_cheg + margem_ton
+# Calcula proporção para alinhar zeros
+total_range = y_max - y_min
+eq_range = max_eq + margem
+scale_factor = total_range / eq_range if eq_range > 0 else 1
+
+# Escala equipe para caber no eixo esquerdo (alinhado ao zero)
+df["Equipe_Escalada"] = df["Equipe"] * scale_factor + y_min
 
 fig = go.Figure()
 
@@ -125,11 +131,11 @@ fig.add_trace(go.Bar(
 ))
 
 fig.add_trace(go.Scatter(
-    x=df["Horario"], y=df["Equipe"],
+    x=df["Horario"], y=df["Equipe_Escalada"],
     mode="lines+markers", name="Equipe",
     line=dict(color="#9B59B6", width=4),
-    marker=dict(size=8),
-    yaxis="y2"
+    marker=dict(size=8, color="#9B59B6"),
+    yaxis="y"
 ))
 
 if rotulos:
@@ -152,28 +158,20 @@ if rotulos:
             )
         if r["Equipe"] > 0:
             fig.add_annotation(
-                x=r["Horario"], y=r["Equipe"],
+                x=r["Horario"], y=r["Equipe_Escalada"],
                 text=f"{int(r['Equipe'])}",
                 font=dict(color="#9B59B6", size=9),
                 bgcolor="white", bordercolor="#9B59B6", borderwidth=1,
-                showarrow=False, yshift=8  # Próximo ao marcador
+                showarrow=False, yshift=8
             )
 
 fig.update_layout(
     xaxis_title="Horario",
     yaxis=dict(
-        title="Toneladas (Chegada + / Saida -)",
+        title="Toneladas (Chegada + / Saida -) | Equipe (escalada)",
         side="left",
         range=[y_min, y_max],
         zeroline=True, zerolinewidth=2, zerolinecolor="black"
-    ),
-    yaxis2=dict(
-        title="Equipe",
-        side="right",
-        overlaying="y",
-        range=[0, max_eq + margem_eq],
-        matches=None,  # Permite escala independente
-        zeroline=False
     ),
     height=650,
     hovermode="x unified",
@@ -193,7 +191,8 @@ if st.session_state.prod_name:
     st.success(f"Arquivo: **{st.session_state.prod_name}**")
 
 out = io.BytesIO()
-with pd.ExcelWriter(out, engine="openpyxl") as w: df.to_excel(w, index=False)
+df_export = df[["Horario", "Chegada_Ton", "Saida_Ton", "Equipe"]].copy()
+with pd.ExcelWriter(out, engine="openpyxl") as w: df_export.to_excel(w, index=False)
 out.seek(0)
 st.download_button("Baixar Excel", out, "producao_detalhada.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
