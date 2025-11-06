@@ -1,9 +1,9 @@
-# pages/2_Total_Funcionarios.py (ESPAÇAMENTO PADRÃO ENTRE HORAS)
+# pages/2_Total_Funcionarios.py (MESMA LÓGICA DO GRÁFICO CONFERENTES VS AUXILIARES)
 
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
+from datetime import datetime
 import io
 
 st.set_page_config(layout="wide")
@@ -39,7 +39,7 @@ padrao_aux = """00:00 04:00 05:15 09:33 10
 
 def ler(f):
     if f:
-        return pd.read_excel(f, header=None).apply(' '.join, axis=1).str.cat(sep='\n') if f.name.endswith('.xlsx') else f.getvalue().decode()
+        return pd.read_excel(f, header=None).apply(' '.join', axis=1).str.cat(sep='\n') if f.name.endswith('.xlsx') else f.getvalue().decode()
     return None
 
 jc = ler(up_conf) or padrao_conf
@@ -54,19 +54,20 @@ def jornadas(t):
     return j
 
 def hor(h): 
-    h,m = map(int, h.split(':')); return datetime(2025,1,1,h,m)
+    try: h,m = map(int, h.split(':')); return h*60 + m
+    except: return 0
 
 def horarios(jc, ja):
-    h = set()
+    h = {'00:00','23:59'}
     for t in [jc, ja]:
         for l in t.split('\n'):
             p = l.strip().split()
             if len(p) in (3,5): h.update(p[:-1])
-    return sorted(h, key=lambda x: int(x.split(':')[0])*60 + int(x.split(':')[1]))
+    return sorted(h, key=hor)
 
 hs = horarios(jc, ja)
-tl = [hor(h) for h in hs]
-total = [0]*len(tl)
+tl_min = [hor(h) for h in hs]  # timeline em minutos
+total = [0]*len(tl_min)
 
 def proc(j, lst, tl):
     e = hor(j['e'])
@@ -80,30 +81,13 @@ def proc(j, lst, tl):
         for i,t in enumerate(tl):
             if e<=t<=sf: lst[i] += j['q']
 
-for j in jornadas(jc): proc(j, total, tl)
-for j in jornadas(ja): proc(j, total, tl)
+for j in jornadas(jc): proc(j, total, tl_min)
+for j in jornadas(ja): proc(j, total, tl_min)
 
-# --- CRIAR TIMELINE PADRÃO A CADA HORA (00:00 a 23:00) ---
-start = datetime(2025, 1, 1, 0, 0)
-end = datetime(2025, 1, 1, 23, 0)
-timeline_padrao = []
-current = start
-while current <= end:
-    timeline_padrao.append(current)
-    current += timedelta(hours=1)
-
-# --- INTERPOLAR VALORES PARA CADA HORA ---
-valores_por_hora = []
-for tp in timeline_padrao:
-    # Encontra o índice mais próximo na timeline original
-    diffs = [(abs((tp - t).total_seconds()), v) for t, v in zip(tl, total)]
-    diffs.sort(key=lambda x: x[0])
-    valores_por_hora.append(diffs[0][1])  # Pega o valor mais próximo
-
+# --- DataFrame com horários originais ---
 df = pd.DataFrame({
-    'Horário': [t.strftime('%H:%M') for t in timeline_padrao],
-    'Total': valores_por_hora,
-    'dt': timeline_padrao
+    'Horário': hs,
+    'Total': total
 })
 
 c1, c2, _ = st.columns([1,1,6])
@@ -111,13 +95,13 @@ with c1: rot = st.checkbox("Rótulos", True, key="rt")
 with c2: st.markdown("**Clique no gráfico para maximizar**")
 
 out = io.BytesIO()
-with pd.ExcelWriter(out, engine='openpyxl') as w: df[['Horário','Total']].to_excel(w, index=False)
+with pd.ExcelWriter(out, engine='openpyxl') as w: df.to_excel(w, index=False)
 out.seek(0)
 st.download_button("📥 Baixar Excel", out, "total.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 fig = go.Figure()
 fig.add_trace(go.Scatter(
-    x=df['dt'], y=df['Total'],
+    x=df['Horário'], y=df['Total'],
     mode='lines+markers',
     name='Total',
     line=dict(color='#90EE90', width=4),
@@ -126,29 +110,28 @@ fig.add_trace(go.Scatter(
     fillcolor='rgba(144,238,144,0.3)'
 ))
 
-# Intervalo de almoço (09:30 - 10:30)
-fig.add_vrect(x0=datetime(2025,1,1,9,30), x1=datetime(2025,1,1,10,30), fillcolor="gray", opacity=0.1)
+# Intervalo de almoço (se existir 09:30 e 10:30)
+if '09:30' in df['Horário'].values and '10:30' in df['Horário'].values:
+    fig.add_vrect(x0='09:30', x1='10:30', fillcolor="gray", opacity=0.1)
 
 if rot:
     for _, r in df.iterrows():
         if r['Total'] > 0:
-            fig.add_annotation(x=r['dt'], y=r['Total']+1, text=str(int(r['Total'])), showarrow=False, font=dict(color='#90EE90', size=11))
+            fig.add_annotation(
+                x=r['Horário'], y=r['Total']+0.8,
+                text=str(int(r['Total'])),
+                showarrow=False,
+                font=dict(color='#90EE90', size=10, family="bold"),
+                bgcolor="white", bordercolor='#90EE90', borderwidth=1, borderpad=4
+            )
 
 fig.update_layout(
-    title="Total de Funcionários (espaçamento padrão por hora)",
+    title="Total de Funcionários (mesma lógica do gráfico Conferentes vs Auxiliares)",
     xaxis_title="Horário",
     yaxis_title="Total",
-    xaxis=dict(
-        tickmode='array',
-        tickvals=df['dt'],
-        ticktext=df['Horário'],
-        tickangle=0  # Rótulos retos
-    ),
     height=600,
     hovermode="x unified",
     margin=dict(l=40, r=40, t=80, b=40)
 )
 
 st.plotly_chart(fig, use_container_width=True)
-
-st.markdown("**Upload → Rótulos → Maximizar → Baixar**")
