@@ -175,7 +175,7 @@ c1, c2, _ = st.columns([1, 1, 6])
 with c1:
     rotulos = st.checkbox("Rótulos", True)           # Liga/desliga rótulos
 with c2:
-    st.markdown("**Upload persiste entre abas!**")
+    
 
 # Exporta para Excel
 output = io.BytesIO()
@@ -263,6 +263,3 @@ with st.expander("Como preparar os arquivos"):
         "- **Sem cabeçalho**\n\n"
         "> **Dica:** Copie do Excel → Bloco de Notas → Salve como `.txt`"
     )
-
-# Mensagem de sucesso
-st.success("Upload persiste + dados visíveis + rótulos em negrito!")
