@@ -216,7 +216,7 @@ if rotulos:
         if r["Chegada_Ton"] > 0:
             fig.add_annotation(x=r["Horario"], y=r["Chegada_Ton"],
                 text=f"{r['Chegada_Ton']}", font=dict(color="#2ECC71", size=9),
-                bgcolor="white", bordercolor="#2ECC71", borderwidth=1,
+                bgcolor="white", bordercolor="#90EE90", borderwidth=1,
                 showarrow=False, yshift=10)
         if r["Saida_Ton"] > 0:
             fig.add_annotation(x=r["Horario"], y=r["Saida_Ton"],
