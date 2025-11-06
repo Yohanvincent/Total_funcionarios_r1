@@ -191,7 +191,7 @@ fig = go.Figure()
 
 fig.add_trace(go.Bar(
     x=df["Horario"], y=df["Chegada_Ton"],
-    name="Chegada (ton)", marker_color="#2ECC71", opacity=0.8
+    name="Chegada (ton)", marker_color="#90EE90", opacity=0.8
 ))
 
 fig.add_trace(go.Bar(
