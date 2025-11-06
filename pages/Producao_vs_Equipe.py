@@ -102,11 +102,19 @@ df = pd.DataFrame({
     "Equipe": eq
 })
 
-# Calcula max/min para eixo Y
+# Calcula limites
 max_cheg = max(cheg_val) if cheg_val else 0
 max_said = max(said_val) if said_val else 0
-y_max = max_cheg + 5
-y_min = -max_said - 5
+max_eq = max(eq) if eq else 0
+
+# Margens
+margem_ton = 5
+margem_eq = 5
+
+y_min = -max_said - margem_ton
+y_max = max_cheg + margem_ton
+y2_min = 0
+y2_max = max_eq + margem_eq
 
 fig = go.Figure()
 
@@ -116,37 +124,73 @@ fig.add_trace(go.Bar(
     name="Chegada (ton)", marker_color="#2ECC71", opacity=0.8
 ))
 
-# Saida (vermelho, abaixo do zero)
+# Saida (vermelho)
 fig.add_trace(go.Bar(
     x=df["Horario"], y=-df["Saida_Ton"],
     name="Saida (ton)", marker_color="#E74C3C", opacity=0.8
 ))
 
-# Equipe (roxo, eixo direito)
+# Equipe (roxo)
 fig.add_trace(go.Scatter(
     x=df["Horario"], y=df["Equipe"],
     mode="lines+markers", name="Equipe",
-    line=dict(color="#9B59B6", width=4), yaxis="y2"
+    line=dict(color="#9B59B6", width=4),
+    marker=dict(size=8),
+    yaxis="y2"
 ))
 
+# Rótulos com caixa (igual aos outros gráficos)
 if rotulos:
     for _, r in df.iterrows():
         if r["Chegada_Ton"] > 0:
-            fig.add_annotation(x=r["Horario"], y=r["Chegada_Ton"], text=f"<b>{r['Chegada_Ton']}</b>", showarrow=False, font=dict(color="#2ECC71", size=9), yshift=10)
+            fig.add_annotation(
+                x=r["Horario"], y=r["Chegada_Ton"],
+                text=f"{r['Chegada_Ton']}",
+                font=dict(color="white", size=9),
+                bgcolor="#2ECC71", bordercolor="#2ECC71", borderwidth=1,
+                showarrow=False, yshift=10
+            )
         if r["Saida_Ton"] > 0:
-            fig.add_annotation(x=r["Horario"], y=-r["Saida_Ton"], text=f"<b>{r['Saida_Ton']}</b>", showarrow=False, font=dict(color="#E74C3C", size=9), yshift=-10)
+            fig.add_annotation(
+                x=r["Horario"], y=-r["Saida_Ton"],
+                text=f"{r['Saida_Ton']}",
+                font=dict(color="white", size=9),
+                bgcolor="#E74C3C", bordercolor="#E74C3C", borderwidth=1,
+                showarrow=False, yshift=-10
+            )
         if r["Equipe"] > 0:
-            fig.add_annotation(x=r["Horario"], y=r["Equipe"], text=f"<b>{int(r['Equipe'])}</b>", showarrow=False, font=dict(color="#9B59B6", size=9), yshift=10)
+            fig.add_annotation(
+                x=r["Horario"], y=r["Equipe"],
+                text=f"{int(r['Equipe'])}",
+                font=dict(color="white", size=9),
+                bgcolor="#9B59B6", bordercolor="#9B59B6", borderwidth=1,
+                showarrow=False, yshift=10
+            )
 
 fig.update_layout(
     xaxis_title="Horario",
-    yaxis=dict(title="Toneladas (Chegada + / Saida -)", side="left", range=[y_min, y_max]),
-    yaxis2=dict(title="Equipe", side="right", overlaying="y", range=[0, max(eq) + 5] if eq else [0, 10]),
-    height=600,
+    yaxis=dict(
+        title="Toneladas (Chegada + / Saida -)",
+        side="left",
+        range=[y_min, y_max],
+        zeroline=True, zerolinewidth=2, zerolinecolor="black"
+    ),
+    yaxis2=dict(
+        title="Equipe",
+        side="right",
+        overlaying="y",
+        range=[y2_min, y2_max],
+        zeroline=False
+    ),
+    height=650,
     hovermode="x unified",
     legend=dict(x=0, y=1.1, orientation="h"),
-    barmode="relative"
+    barmode="relative",
+    margin=dict(l=60, r=60, t=40, b=60)
 )
+
+# Alinhar zero do y2 com zero do y1
+fig.update_yaxes secondary_y=True, position=1.0)
 
 st.plotly_chart(fig, use_container_width=True)
 
