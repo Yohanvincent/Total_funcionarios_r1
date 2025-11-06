@@ -1,0 +1,157 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+from datetime import datetime, timedelta
+
+# ============================================================
+
+# CONFIGURAÇÃO DA PÁGINA
+
+# ============================================================
+
+st.set_page_config(layout="wide")
+st.title("Acumulado x Produção")
+
+# ============================================================
+
+# CAMPO DE AJUSTE (INPUT DO USUÁRIO)
+
+# ============================================================
+
+fator_kg_vol = st.number_input("Fator kg/vol (padrão 16.10)", value=16.10, step=0.1)
+kg_por_m3 = 300  # 1 m³ = 300 kg
+tempo_descarga_por_pessoa = 30  # segundos
+
+# ============================================================
+
+# DADOS PADRÃO DE PRODUÇÃO
+
+# ============================================================
+
+dados_padrao = {
+"Horario": [
+"00:00","00:30","01:00","01:30","02:00","02:30","03:00","03:30","04:00",
+"04:30","05:00","05:30","06:00","06:30","07:00","07:30","08:00","08:30",
+"09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00",
+"13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30",
+"18:00","18:30","19:00","19:30","20:00","20:30","21:00","21:30","22:00",
+"22:30","23:00","23:30"
+],
+"Producao_ton": [
+7.3,0,0,6.9,0,5.1,0,0,2.4,0,0,3.5,0,0,0,6.2,0,0,8.7,0,0,7.0,0,0,6.3,0,0,
+4.8,0,0,5.9,0,0,8.2,0,0,7.8,0,0,4.6,0,0,2.9,0,0,1.5,0,0,0
+]
+}
+df_prod = pd.DataFrame(dados_padrao)
+df_prod["Hora_dt"] = pd.to_datetime(df_prod["Horario"], format="%H:%M")
+
+# ============================================================
+
+# OBTÉM DADOS DE FUNCIONÁRIOS DO SESSION_STATE
+
+# ============================================================
+
+if "total_conf_bytes" in st.session_state and "total_aux_bytes" in st.session_state:
+try:
+df_func = pd.read_excel(st.session_state.get("total_func_df", None))
+except Exception:
+df_func = None
+else:
+df_func = None
+
+# Caso não tenha, usa padrão fixo
+
+if df_func is None or "Total" not in df_func.columns:
+horas_func = [f"{h:02d}:{m:02d}" for h in range(0, 24) for m in [0, 30]]
+total_func = [10,10,12,15,18,20,25,27,28,26,22,20,19,18,18,20,22,24,25,25,22,18,15,12,10,8,8,6,5,5,4,4,4,4,3,3,3,2,2,2,1,1,1,1,1,1,1,1]
+df_func = pd.DataFrame({"Horario": horas_func[:len(total_func)], "Total": total_func})
+df_func["Hora_dt"] = pd.to_datetime(df_func["Horario"], format="%H:%M")
+
+# ============================================================
+
+# UNIFICAÇÃO DE EIXO DE TEMPO (PRODUÇÃO + FUNCIONÁRIOS)
+
+# ============================================================
+
+horas_unificadas = pd.date_range("00:00", "23:30", freq="30min").time
+df_base = pd.DataFrame({"Hora_dt": [datetime.combine(datetime.today(), h) for h in horas_unificadas]})
+df_base = df_base.merge(df_prod[["Hora_dt","Producao_ton"]], on="Hora_dt", how="left").fillna(0)
+df_base = df_base.merge(df_func[["Hora_dt","Total"]], on="Hora_dt", how="left").fillna(method="ffill").fillna(0)
+
+# ============================================================
+
+# CÁLCULO DE ACÚMULO
+
+# ============================================================
+
+acumulo = []
+estoque_atual = 0
+
+for _, row in df_base.iterrows():
+chegada_kg = row["Producao_ton"] * 1000
+funcionarios = row["Total"]
+capacidade_descarga_kg = (funcionarios * fator_kg_vol / tempo_descarga_por_pessoa) * 1800  # 1800s = 30min
+# Atualiza o estoque
+estoque_atual = estoque_atual + chegada_kg - capacidade_descarga_kg
+if estoque_atual < 0:
+estoque_atual = 0
+acumulo.append(estoque_atual / 1000)  # converte para toneladas
+
+df_base["Acumulado_ton"] = acumulo
+
+# ============================================================
+
+# GRÁFICO
+
+# ============================================================
+
+fig = go.Figure()
+
+# Barras de produção
+
+fig.add_trace(go.Bar(
+x=df_base["Hora_dt"],
+y=df_base["Producao_ton"],
+name="Produção (Ton)",
+marker_color="#90EE90",
+opacity=0.8
+))
+
+# Linha acumulada (estoque)
+
+fig.add_trace(go.Scatter(
+x=df_base["Hora_dt"],
+y=df_base["Acumulado_ton"],
+name="Acumulado (Ton)",
+mode="lines",
+line=dict(color="#1E90FF", width=4),
+fill="tozeroy",
+fillcolor="rgba(30,144,255,0.2)"
+))
+
+fig.update_layout(
+title="Acúmulo x Produção (Simulação de Descarga)",
+xaxis_title="Horário",
+yaxis_title="Toneladas",
+hovermode="x unified",
+barmode="overlay",
+height=650,
+margin=dict(l=40, r=40, t=40, b=40),
+legend=dict(orientation="h", y=-0.2)
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+# ============================================================
+
+# TABELA DE RESULTADOS
+
+# ============================================================
+
+st.dataframe(df_base[["Hora_dt", "Producao_ton", "Total", "Acumulado_ton"]].rename(columns={
+"Hora_dt": "Horário",
+"Producao_ton": "Produção (ton)",
+"Total": "Funcionários",
+"Acumulado_ton": "Acumulado (ton)"
+}), use_container_width=True)
