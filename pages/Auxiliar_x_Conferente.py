@@ -1,4 +1,4 @@
-# pages/1_Conferentes_vs_Auxiliares.py (CACHE DE UPLOAD + COMENTÁRIOS + DOCUMENTAÇÃO)
+# pages/1_Conferentes_vs_Auxiliares.py (CACHE + COMENTÁRIOS + ZERO ERROS)
 
 import streamlit as st
 import pandas as pd
@@ -8,32 +8,33 @@ import io
 # =============================================
 # CONFIGURAÇÃO DA PÁGINA
 # =============================================
-st.set_page_config(layout="wide")  # Usa toda a largura da tela
+st.set_page_config(layout="wide")  # Layout largo para melhor visualização
 
 st.title("Disponibilidade: Conferentes vs Auxiliares")
 st.markdown("**Upload (Excel/CSV/TXT) ou use padrão.**")
 
 # =============================================
-# UPLOAD DE ARQUIVOS COM CACHE (NÃO PERDE AO TROCAR DE ABA)
+# CACHE DE UPLOAD: NÃO PERDE DADOS AO TROCAR DE ABA
 # =============================================
-# @st.cache_data permite que o arquivo lido seja mantido mesmo ao navegar entre páginas
+# @st.cache_data mantém o arquivo carregado em memória
+# Mesmo ao navegar entre páginas, o upload persiste
 @st.cache_data(show_spinner=False)
 def carregar_arquivo(uploaded_file):
-    """Lê arquivo TXT, CSV ou Excel e retorna como string com quebras de linha."""
+    """Lê e retorna o conteúdo do arquivo como string com quebras de linha."""
     if uploaded_file is None:
         return None
     if uploaded_file.name.endswith(".xlsx"):
         df = pd.read_excel(uploaded_file, header=None)
         return "\n".join(" ".join(map(str, row)) for row in df.values)
     else:
-        return uploaded_file.getvalue().decode("utf-8")
+        return uploaded_file.getvalue().decode("utf-8", errors="ignore")
 
-# Colunas para upload
+# Uploaders com chaves únicas
 c1, c2 = st.columns(2)
 with c1:
-    up_conf = st.file_uploader("Conferentes", ["txt", "csv", "xlsx"], key="conf_uploader")
+    up_conf = st.file_uploader("Conferentes", ["txt", "csv", "xlsx"], key="conf_upload")
 with c2:
-    up_aux = st.file_uploader("Auxiliares", ["txt", "csv", "xlsx"], key="aux_uploader")
+    up_aux = st.file_uploader("Auxiliares", ["txt", "csv", "xlsx"], key="aux_upload")
 
 # Dados padrão (usados se não houver upload)
 padrao_conf = (
@@ -49,178 +50,134 @@ padrao_aux = (
     "17:48 21:48 1\n18:00 22:00 19\n19:00 22:52 5"
 )
 
-# Carrega arquivos com cache
+# Carrega com cache
 jc = carregar_arquivo(up_conf) or padrao_conf
 ja = carregar_arquivo(up_aux) or padrao_aux
 
 # =============================================
-# PROCESSAMENTO DE JORNADAS
+# FUNÇÕES DE PROCESSAMENTO
 # =============================================
 def extrair_jornadas(texto):
-    """Converte texto em lista de jornadas (completa ou meia)."""
+    """Extrai jornadas do texto: completa (5 partes) ou meia (3 partes)."""
     jornadas = []
     for linha in texto.strip().split("\n"):
-        partes = linha.strip().split()
-        if len(partes) == 5 and partes[4].isdigit():
-            # Jornada completa: entrada, saída_intervalo, retorno, saída_final, qtd
-            jornadas.append({
-                "tipo": "c",
-                "e": partes[0],
-                "si": partes[1],
-                "ri": partes[2],
-                "sf": partes[3],
-                "q": int(partes[4])
-            })
-        elif len(partes) == 3 and partes[2].isdigit():
-            # Jornada meia: entrada, saída_final, qtd
-            jornadas.append({
-                "tipo": "m",
-                "e": partes[0],
-                "sf": partes[1],
-                "q": int(partes[2])
-            })
+        p = linha.strip().split()
+        if len(p) == 5 and p[4].isdigit():
+            jornadas.append({"tipo": "c", "e": p[0], "si": p[1], "ri": p[2], "sf": p[3], "q": int(p[4])})
+        elif len(p) == 3 and p[2].isdigit():
+            jornadas.append({"tipo": "m", "e": p[0], "sf": p[1], "q": int(p[2])})
     return jornadas
 
-def minutos(horario):
-    """Converte 'HH:MM' em minutos do dia (0 a 1439)."""
+def minutos(h):
+    """Converte 'HH:MM' → minutos do dia."""
     try:
-        h, m = map(int, horario.split(":"))
+        h, m = map(int, h.split(":"))
         return h * 60 + m
     except:
         return 0
 
 def coletar_horarios(jc, ja):
-    """Coleta todos os horários únicos de entrada/saída e ordena."""
-    horarios = {"00:00", "23:59"}
-    for texto in [jc, ja]:
-        for linha in texto.strip().split("\n"):
-            partes = linha.strip().split()
-            if len(partes) in (3, 5):
-                horarios.update(partes[:-1])
-    return sorted(horarios, key=minutos)
+    """Coleta e ordena todos os horários únicos."""
+    h = {"00:00", "23:59"}
+    for t in [jc, ja]:
+        for l in t.strip().split("\n"):
+            p = l.strip().split()
+            if len(p) in (3, 5):
+                h.update(p[:-1])
+    return sorted(h, key=minutos)
 
 # =============================================
 # CÁLCULO DE DISPONIBILIDADE
 # =============================================
-horarios_lista = coletar_horarios(jc, ja)
-timeline_min = [minutos(h) for h in horarios_lista]
-conferentes = [0] * len(timeline_min)
-auxiliares = [0] * len(timeline_min)
+horarios = coletar_horarios(jc, ja)
+timeline = [minutos(h) for h in horarios]
+conf_count = [0] * len(timeline)
+aux_count = [0] * len(timeline)
 
-def aplicar_jornada(jornada, lista, timeline):
-    """Adiciona quantidade de pessoas na timeline conforme jornada."""
-    entrada = minutos(jornada["e"])
-    saida_final = minutos(jornada["sf"])
-    if jornada["tipo"] == "c":
-        saida_int = minutos(jornada["si"])
-        retorno = minutos(jornada["ri"])
-        for i, t in enumerate(timeline):
-            if (entrada <= t < saida_int) or (retorno <= t <= saida_final):
-                lista[i] += jornada["q"]
+def aplicar_jornada(j, lista, tl):
+    """Aplica jornada na timeline."""
+    e = minutos(j["e"])
+    sf = minutos(j["sf"])
+    if j["tipo"] == "c":
+        si = minutos(j["si"])
+        ri = minutos(j["ri"])
+        for i, t in enumerate(tl):
+            if (e <= t < si) or (ri <= t <= sf):
+                lista[i] += j["q"]
     else:
-        for i, t in enumerate(timeline):
-            if entrada <= t <= saida_final:
-                lista[i] += jornada["q"]
+        for i, t in enumerate(tl):
+            if e <= t <= sf:
+                lista[i] += j["q"]
 
-# Processa todas as jornadas
 for j in extrair_jornadas(jc):
-    aplicar_jornada(j, conferentes, timeline_min)
+    aplicar_jornada(j, conf_count, timeline)
 for j in extrair_jornadas(ja):
-    aplicar_jornada(j, auxiliares, timeline_min)
+    aplicar_jornada(j, aux_count, timeline)
 
-# =============================================
-# DATAFRAME FINAL
-# =============================================
-df = pd.DataFrame({
-    "Horario": horarios_lista,
-    "Conferentes": conferentes,
-    "Auxiliares": auxiliares
-})
+df = pd.DataFrame({"Horario": horarios, "Conferentes": conf_count, "Auxiliares": aux_count})
 
 # =============================================
 # CONTROLES E DOWNLOAD
 # =============================================
 c1, c2, _ = st.columns([1, 1, 6])
 with c1:
-    mostrar_rotulos = st.checkbox("Rótulos", True)
+    rotulos = st.checkbox("Rótulos", True)
 with c2:
     st.markdown("**Clique no gráfico para maximizar**")
 
-# Download do resultado
 output = io.BytesIO()
 with pd.ExcelWriter(output, engine="openpyxl") as writer:
     df.to_excel(writer, index=False)
 output.seek(0)
 
 st.download_button(
-    label="📥 Baixar Excel",
-    data=output,
-    file_name="equipe.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    "Baixar Excel",
+    output,
+    "equipe.xlsx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
 
 # =============================================
-# GRÁFICO INTERATIVO
+# GRÁFICO
 # =============================================
 fig = go.Figure()
 
-# Trace: Conferentes
 fig.add_trace(go.Scatter(
-    x=df["Horario"],
-    y=df["Conferentes"],
-    mode="lines+markers",
-    name="Conferentes",
-    line=dict(color="#90EE90", width=4),
-    marker=dict(size=6),
-    fill="tozeroy",
-    fillcolor="rgba(144, 238, 144, 0.3)"
+    x=df["Horario"], y=df["Conferentes"],
+    mode="lines+markers", name="Conferentes",
+    line=dict(color="#90EE90", width=4), marker=dict(size=6),
+    fill="tozeroy", fillcolor="rgba(144, 238, 144, 0.3)"
 ))
 
-# Trace: Auxiliares
 fig.add_trace(go.Scatter(
-    x=df["Horario"],
-    y=df["Auxiliares"],
-    mode="lines+markers",
-    name="Auxiliares",
-    line=dict(color="#228B22", width=4),
-    marker=dict(size=6),
-    fill="tozeroy",
-    fillcolor="rgba(34, 139, 34, 0.3)"
+    x=df["Horario"], y=df["Auxiliares"],
+    mode="lines+markers", name="Auxiliares",
+    line=dict(color="#228B22", width=4), marker=dict(size=6),
+    fill="tozeroy", fillcolor="rgba(34, 139, 34, 0.3)"
 ))
 
-# Intervalo de almoço (se existir)
 if "09:30" in df["Horario"].values and "10:30" in df["Horario"].values:
-    fig.add_vrect(x0="09:30", x1="10:30", fillcolor="gray", opacity=0.1, line_width=0)
+    fig.add_vrect(x0="09:30", x1="10:30", fillcolor="gray", opacity=0.1)
 
-# Rótulos com caixinha (apenas se ativado)
-if mostrar_rotulos:
-    for _, row in df.iterrows():
-        if row["Conferentes"] > 0:
+if rotulos:
+    for _, r in df.iterrows():
+        if r["Conferentes"] > 0:
             fig.add_annotation(
-                x=row["Horario"],
-                y=row["Conferentes"] + 0.8,
-                text=str(int(row["Conferentes"])),
+                x=r["Horario"], y=r["Conferentes"] + 0.8,
+                text=str(int(r["Conferentes"])),
                 showarrow=False,
                 font=dict(color="#90EE90", size=10, family="bold"),
-                bgcolor="white",
-                bordercolor="#90EE90",
-                borderwidth=1,
-                borderpad=4
+                bgcolor="white", bordercolor="#90EE90", borderwidth=1, borderpad=4
             )
-        if row["Auxiliares"] > 0:
+        if r["Auxiliares"] > 0:
             fig.add_annotation(
-                x=row["Horario"],
-                y=row["Auxiliares"] + 0.8,
-                text=str(int(row["Auxiliares"])),
+                x=r["Horario"], y=r["Auxiliares"] + 0.8,
+                text=str(int(r["Auxiliares"])),
                 showarrow=False,
                 font=dict(color="#228B22", size=10, family="bold"),
-                bgcolor="white",
-                bordercolor="#228B22",
-                borderwidth=1,
-                borderpad=4
+                bgcolor="white", bordercolor="#228B22", borderwidth=1, borderpad=4
             )
 
-# Layout do gráfico
 fig.update_layout(
     title="Disponibilidade de Equipe",
     xaxis_title="Horário",
@@ -228,28 +185,30 @@ fig.update_layout(
     height=600,
     hovermode="x unified",
     margin=dict(l=40, r=40, t=80, b=40),
-    legend=dict(x=0, y=1, bgcolor="rgba(255,255,255,0.8)", bordercolor="gray", borderwidth=1)
+    legend=dict(x=0, y=1)
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
 # =============================================
-# EXPLICAÇÃO DE UPLOAD (EXPANDÍVEL)
+# EXPLICAÇÃO DE UPLOAD
 # =============================================
-with st.expander("📋 Como preparar os arquivos para upload", expanded=False):
-    st.markdown("""
-### Formato das linhas (separadas por espaço):
+with st.expander("Como preparar os arquivos para upload"):
+    st.markdown(
+        "### Formato das linhas:\n\n"
+        "| Tipo | Formato | Exemplo |\n"
+        "|------|--------|--------|\n"
+        "| Completa | `entrada saída_int retorno saída_final qtd` | `04:00 09:00 10:15 13:07 27` |\n"
+        "| Meia | `entrada saída_final qtd` | `17:48 21:48 1` |\n\n"
+        "### Regras:\n"
+        "- `HH:MM` (24h)\n"
+        "- Uma linha = um grupo\n"
+        "- Quantidade = inteiro\n"
+        "- Separado por espaços\n"
+        "- Sem cabeçalho\n\n"
+        "### Exemplo TXT:\n"
+        "```\n00:00 04:00 05:15 09:33 9\n04:00 09:00 10:15 13:07 27\n```\n\n"
+        "> Copie do Excel → Bloco de Notas → Salve como `.txt`"
+    )
 
-| Tipo | Formato | Exemplo |
-|------|--------|--------|
-| **Jornada Completa** | `entrada saída_intervalo retorno_intervalo saída_final qtd` | `04:00 09:00 10:15 13:07 27` |
-| **Jornada Meia** | `entrada saída_final qtd` | `17:48 21:48 1` |
-
-### Regras:
-- Horários em `HH:MM` (24h)
-- Uma linha = um grupo com mesma jornada
-- Quantidade = número inteiro
-- Separado por **espaços**
-- **Sem cabeçalho**
-
-### Exemplo TXT:
+st.markdown("**Upload → Rótulos → Maximizar → Baixar**")
