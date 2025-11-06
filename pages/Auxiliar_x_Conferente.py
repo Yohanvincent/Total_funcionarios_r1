@@ -1,4 +1,4 @@
-# pages/1_Conferentes_vs_Auxiliares.py (COM EXPLICAÇÃO DE UPLOAD)
+# pages/1_Conferentes_vs_Auxiliares.py (CORRIGIDO + EXPLICAÇÃO)
 
 import streamlit as st
 import pandas as pd
@@ -189,8 +189,8 @@ fig.update_layout(
 
 st.plotly_chart(fig, use_container_width=True)
 
-# === EXPLICAÇÃO DE UPLOAD ABAIXO DO GRÁFICO ===
-with st.expander("📋 Como preparar os arquivos para upload (Conferentes e Auxiliares)", expanded=False):
+# === EXPLICAÇÃO DE UPLOAD ===
+with st.expander("Como preparar os arquivos para upload (Conferentes e Auxiliares)", expanded=False):
     st.markdown("""
 ### Formato das linhas (separadas por espaço):
 
