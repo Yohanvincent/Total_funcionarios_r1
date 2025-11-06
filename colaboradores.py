@@ -1,22 +1,59 @@
-# app.py
-# ==============================================
-# DASHBOARD LOGÍSTICO WEB (Streamlit) + DOWNLOAD EXCEL (SEM XlsxWriter)
-# - Usa openpyxl (compatível com Pyodide/Streamlit)
-# - Disponibilidade: Conferentes vs Auxiliares
-# - Suporte a jornada completa e meia jornada
-# - Botões: Rótulos (liga/desliga) + Maximizar
-# - Upload de dados via Excel/CSV
-# - Download em Excel (colunas separadas)
-# ==============================================
-
+# pages/1_Conferentes_vs_Auxiliares.py
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import io
 
-# ===================== CONFIGURAÇÃO DA PÁGINA =====================
-st.set_page_config(page_title="Disponibilidade de Equipe", layout="wide")
+st.title("Disponibilidade de Equipe: Conferentes vs Auxiliares")
+
+st.markdown("**Upload de dados (Excel/CSV) ou use os dados padrão abaixo.**")
+
+# --- Upload de arquivos ---
+col1, col2 = st.columns(2)
+with col1:
+    uploaded_conf = st.file_uploader("Jornada Conferentes", type=["txt", "csv", "xlsx"], key="conf")
+with col2:
+    uploaded_aux = st.file_uploader("Jornada Auxiliares", type=["txt", "csv", "xlsx"], key="aux")
+
+# --- Dados padrão ---
+jornada_conferentes_padrao = """
+00:00 04:00 05:15 09:33 9
+04:00 09:00 10:15 13:07 27
+04:30 08:30 10:30 15:14 1
+06:00 11:00 12:15 16:03 1
+07:45 12:00 13:15 17:48 1
+08:00 12:00 13:15 18:03 2
+10:00 12:00 14:00 20:48 11
+12:00 16:00 17:15 22:02 8
+13:00 16:00 17:15 22:55 5
+15:45 18:00 18:15 22:00 7
+16:30 19:30 19:45 22:39 2
+"""
+jornada_auxiliares_padrao = """
+00:00 04:00 05:15 09:33 10
+04:00 09:00 10:15 13:07 17
+12:00 16:00 17:15 22:02 2
+13:00 16:00 17:15 22:55 3
+15:45 18:00 18:15 22:00 3
+16:30 19:30 19:45 22:39 2
+17:48 21:48 1
+18:00 22:00 19
+19:00 22:52 5
+"""
+
+# --- Leitura dos dados ---
+def ler_arquivo(uploaded_file):
+    if uploaded_file is not None:
+        if uploaded_file.name.endswith('.xlsx'):
+            df = pd.read_excel(uploaded_file, header=None)
+            return '\n'.join(df.astype(str).apply(' '.join', axis=1))
+        else:
+            return uploaded_file.getvalue().decode("utf-8")
+    return None
+
+jornada_conferentes = ler_arquivo(uploaded_conf) or jornada_conferentes_padrao
+jornada_auxiliares = ler_arquivo(uploaded_aux) or jornada_auxiliares_padrao
 
 # ===================== FUNÇÃO: LER JORNADAS =====================
 def ler_jornadas(texto):
@@ -85,10 +122,8 @@ def hora_para_minutos(hora):
 def processar_dados(jornada_conferentes, jornada_auxiliares):
     horarios_lista = coletar_horarios(jornada_conferentes, jornada_auxiliares)
     timeline_minutos = [hora_para_minutos(h) for h in horarios_lista]
-
     disponibilidade_conferentes = [0] * len(timeline_minutos)
     disponibilidade_auxiliares = [0] * len(timeline_minutos)
-
     for j in ler_jornadas(jornada_conferentes):
         if j['tipo'] == 'completa':
             entrada = hora_para_minutos(j['entrada'])
@@ -104,7 +139,6 @@ def processar_dados(jornada_conferentes, jornada_auxiliares):
             for i, t in enumerate(timeline_minutos):
                 if entrada <= t <= saida_final:
                     disponibilidade_conferentes[i] += j['quantidade']
-
     for j in ler_jornadas(jornada_auxiliares):
         if j['tipo'] == 'completa':
             entrada = hora_para_minutos(j['entrada'])
@@ -120,65 +154,12 @@ def processar_dados(jornada_conferentes, jornada_auxiliares):
             for i, t in enumerate(timeline_minutos):
                 if entrada <= t <= saida_final:
                     disponibilidade_auxiliares[i] += j['quantidade']
-
     df = pd.DataFrame({
         'Horário': horarios_lista,
         'Conferentes': disponibilidade_conferentes,
         'Auxiliares': disponibilidade_auxiliares
     })
     return df
-
-# ===================== INTERFACE =====================
-st.title("Disponibilidade de Equipe: Conferentes vs Auxiliares")
-st.markdown("**Upload de dados (Excel/CSV) ou use os dados padrão abaixo.**")
-
-# --- Upload de arquivos ---
-col1, col2 = st.columns(2)
-
-with col1:
-    uploaded_conf = st.file_uploader("Jornada Conferentes", type=["txt", "csv", "xlsx"], key="conf")
-with col2:
-    uploaded_aux = st.file_uploader("Jornada Auxiliares", type=["txt", "csv", "xlsx"], key="aux")
-
-# --- Dados padrão ---
-jornada_conferentes_padrao = """
-00:00 04:00 05:15 09:33 9
-04:00 09:00 10:15 13:07 27
-04:30 08:30 10:30 15:14 1
-06:00 11:00 12:15 16:03 1
-07:45 12:00 13:15 17:48 1
-08:00 12:00 13:15 18:03 2
-10:00 12:00 14:00 20:48 11
-12:00 16:00 17:15 22:02 8
-13:00 16:00 17:15 22:55 5
-15:45 18:00 18:15 22:00 7
-16:30 19:30 19:45 22:39 2
-"""
-
-jornada_auxiliares_padrao = """
-00:00 04:00 05:15 09:33 10
-04:00 09:00 10:15 13:07 17
-12:00 16:00 17:15 22:02 2
-13:00 16:00 17:15 22:55 3
-15:45 18:00 18:15 22:00 3
-16:30 19:30 19:45 22:39 2
-17:48 21:48 1
-18:00 22:00 19
-19:00 22:52 5
-"""
-
-# --- Leitura dos dados ---
-def ler_arquivo(uploaded_file):
-    if uploaded_file is not None:
-        if uploaded_file.name.endswith('.xlsx'):
-            df = pd.read_excel(uploaded_file, header=None)
-            return '\n'.join(df.astype(str).apply(' '.join, axis=1))
-        else:
-            return uploaded_file.getvalue().decode("utf-8")
-    return None
-
-jornada_conferentes = ler_arquivo(uploaded_conf) or jornada_conferentes_padrao
-jornada_auxiliares = ler_arquivo(uploaded_aux) or jornada_auxiliares_padrao
 
 # --- Processamento ---
 df = processar_dados(jornada_conferentes, jornada_auxiliares)
@@ -195,7 +176,6 @@ output = io.BytesIO()
 with pd.ExcelWriter(output, engine='openpyxl') as writer:
     df.to_excel(writer, index=False, sheet_name='Disponibilidade')
 output.seek(0)
-
 st.download_button(
     label="📥 Baixar Excel",
     data=output,
@@ -205,7 +185,6 @@ st.download_button(
 
 # --- Gráfico Plotly ---
 fig = make_subplots()
-
 fig.add_trace(go.Scatter(
     x=df['Horário'], y=df['Conferentes'],
     mode='lines+markers',
@@ -215,7 +194,6 @@ fig.add_trace(go.Scatter(
     fill='tozeroy',
     fillcolor='rgba(144, 238, 144, 0.3)'
 ))
-
 fig.add_trace(go.Scatter(
     x=df['Horário'], y=df['Auxiliares'],
     mode='lines+markers',
@@ -225,11 +203,9 @@ fig.add_trace(go.Scatter(
     fill='tozeroy',
     fillcolor='rgba(34, 139, 34, 0.3)'
 ))
-
 # Intervalo
 if '09:30' in df['Horário'].values and '10:30' in df['Horário'].values:
     fig.add_vrect(x0='09:30', x1='10:30', fillcolor="gray", opacity=0.1, line_width=0)
-
 # Rótulos
 if mostrar_rotulos:
     for _, row in df.iterrows():
@@ -243,7 +219,6 @@ if mostrar_rotulos:
                                text=str(int(row['Auxiliares'])),
                                showarrow=False, font=dict(color='#228B22', size=10, family="bold"),
                                bgcolor="white", bordercolor='#228B22', borderwidth=1, borderpad=4)
-
 fig.update_layout(
     title="Disponibilidade de Equipe (00:00 - 23:59)",
     xaxis_title="Horário",
@@ -253,7 +228,6 @@ fig.update_layout(
     height=600,
     margin=dict(t=80, b=50, l=50, r=50)
 )
-
 st.plotly_chart(fig, use_container_width=True)
 
 # --- Instruções ---
