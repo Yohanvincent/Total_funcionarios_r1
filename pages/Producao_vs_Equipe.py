@@ -107,22 +107,24 @@ max_said = max(said_val) if said_val else 0
 max_eq = max(eq) if eq else 0
 
 margem = 5
-y_min = -max_said - margem
-y_max = max_cheg + margem
+y_max = max(max_cheg, max_said) + margem
 y2_max = max_eq + margem
 
 fig = go.Figure()
 
+# Chegada: verde, positivo
 fig.add_trace(go.Bar(
     x=df["Horario"], y=df["Chegada_Ton"],
     name="Chegada (ton)", marker_color="#2ECC71", opacity=0.8
 ))
 
+# Saída: vermelha, positivo
 fig.add_trace(go.Bar(
-    x=df["Horario"], y=-df["Saida_Ton"],
+    x=df["Horario"], y=df["Saida_Ton"],
     name="Saida (ton)", marker_color="#E74C3C", opacity=0.8
 ))
 
+# Equipe: linha roxa, eixo direito
 fig.add_trace(go.Scatter(
     x=df["Horario"], y=df["Equipe"],
     mode="lines+markers", name="Equipe",
@@ -143,21 +145,20 @@ if rotulos:
             )
         if r["Saida_Ton"] > 0:
             fig.add_annotation(
-                x=r["Horario"], y=-r["Saida_Ton"],
+                x=r["Horario"], y=r["Saida_Ton"],
                 text=f"{r['Saida_Ton']}",
                 font=dict(color="#E74C3C", size=9),
                 bgcolor="white", bordercolor="#E74C3C", borderwidth=1,
-                showarrow=False, yshift=-10
+                showarrow=False, yshift=10
             )
         if r["Equipe"] > 0:
-            # Rótulo centralizado verticalmente na bolinha
             fig.add_annotation(
                 x=r["Horario"], y=r["Equipe"],
                 text=f"{int(r['Equipe'])}",
                 font=dict(color="#9B59B6", size=9),
                 bgcolor="white", bordercolor="#9B59B6", borderwidth=1,
                 showarrow=False,
-                yshift=0,  # Zero deslocamento vertical
+                yshift=0,
                 align="center",
                 valign="middle"
             )
@@ -165,10 +166,10 @@ if rotulos:
 fig.update_layout(
     xaxis_title="Horario",
     yaxis=dict(
-        title="Toneladas (Chegada + / Saida -)",
+        title="Toneladas (Chegada / Saida)",
         side="left",
-        range=[y_min, y_max],
-        zeroline=True, zerolinewidth=2, zerolinecolor="black"
+        range=[0, y_max],
+        zeroline=False
     ),
     yaxis2=dict(
         title="Equipe",
@@ -181,7 +182,7 @@ fig.update_layout(
     height=650,
     hovermode="x unified",
     legend=dict(x=0, y=1.1, orientation="h"),
-    barmode="relative",
+    barmode="stack",  # Empilha barras para melhor visualização
     margin=dict(l=60, r=60, t=40, b=60)
 )
 
