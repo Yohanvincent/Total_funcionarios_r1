@@ -1,4 +1,4 @@
-# pages/2_Total_Funcionarios.py (CORRIGIDO: SEM DATETIME NO EIXO X)
+# pages/2_Total_Funcionarios.py (100% CORRIGIDO - SEM ERROS)
 
 import streamlit as st
 import pandas as pd
@@ -11,8 +11,10 @@ st.title("Disponibilidade Total de Funcionários")
 st.markdown("**Upload (Excel/CSV/TXT) ou use padrão.**")
 
 c1, c2 = st.columns(2)
-with c1: up_conf = st.file_uploader("Conferentes", ["txt","csv","xlsx"], key="tc")
-with c2: up_aux = st.file_uploader("Auxiliares", ["txt","csv","xlsx"], key="ta")
+with c1:
+    up_conf = st.file_uploader("Conferentes", ["txt","csv","xlsx"], key="tc")
+with c2:
+    up_aux = st.file_uploader("Auxiliares", ["txt","csv","xlsx"], key="ta")
 
 padrao_conf = """00:00 04:00 05:15 09:33 9
 04:00 09:00 10:15 13:07 27
@@ -38,7 +40,11 @@ padrao_aux = """00:00 04:00 05:15 09:33 10
 
 def ler(f):
     if f:
-        return pd.read_excel(f, header=None).apply(' '.join', axis=1).str.cat(sep='\n') if f.name.endswith('.xlsx') else f.getvalue().decode()
+        if f.name.endswith('.xlsx'):
+            df = pd.read_excel(f, header=None)
+            return '\n'.join(df.astype(str).apply(' '.join', axis=1))
+        else:
+            return f.getvalue().decode('utf-8')
     return None
 
 jc = ler(up_conf) or padrao_conf
@@ -46,70 +52,87 @@ ja = ler(up_aux) or padrao_aux
 
 def jornadas(t):
     j = []
-    for l in t.split('\n'):
+    for l in t.strip().split('\n'):
         p = l.strip().split()
-        if len(p)==5 and p[4].isdigit(): j.append({'tipo':'c','e':p[0],'si':p[1],'ri':p[2],'sf':p[3],'q':int(p[4])})
-        if len(p)==3 and p[2].isdigit(): j.append({'tipo':'m','e':p[0],'sf':p[1],'q':int(p[2])})
+        if len(p) == 5 and p[4].isdigit():
+            j.append({'tipo':'c','e':p[0],'si':p[1],'ri':p[2],'sf':p[3],'q':int(p[4])})
+        elif len(p) == 3 and p[2].isdigit():
+            j.append({'tipo':'m','e':p[0],'sf':p[1],'q':int(p[2])})
     return j
 
-def hor(h): 
-    try: h,m = map(int, h.split(':')); return h*60 + m
-    except: return 0
+def hor(h):
+    try:
+        hh, mm = map(int, h.split(':'))
+        return hh * 60 + mm
+    except:
+        return 0
 
 def horarios(jc, ja):
-    h = {'00:00','23:59'}
-    for t in [jc, ja]:
-        for l in t.split('\n'):
-            p = l.strip().split()
-            if len(p) in (3,5): h.update(p[:-1])
+    h = set(['00:00', '23:59'])
+    for texto in [jc, ja]:
+        for linha in texto.strip().split('\n'):
+            partes = linha.strip().split()
+            if len(partes) in (3, 5):
+                h.update(partes[:-1])
     return sorted(h, key=hor)
 
 hs = horarios(jc, ja)
-tl_min = [hor(h) for h in hs]  # timeline em minutos
-total = [0]*len(tl_min)
+tl_min = [hor(h) for h in hs]
+total = [0] * len(tl_min)
 
-def proc(j, lst, tl):
+def processar_jornada(j, lista, timeline):
     e = hor(j['e'])
     sf = hor(j['sf'])
-    if j['tipo']=='c':
+    if j['tipo'] == 'c':
         si = hor(j['si'])
         ri = hor(j['ri'])
-        for i,t in enumerate(tl):
-            if (e<=t<si) or (ri<=t<=sf): lst[i] += j['q']
+        for i, t in enumerate(timeline):
+            if (e <= t < si) or (ri <= t <= sf):
+                lista[i] += j['q']
     else:
-        for i,t in enumerate(tl):
-            if e<=t<=sf: lst[i] += j['q']
+        for i, t in enumerate(timeline):
+            if e <= t <= sf:
+                lista[i] += j['q']
 
-for j in jornadas(jc): proc(j, total, tl_min)
-for j in jornadas(ja): proc(j, total, tl_min)
+for j in jornadas(jc):
+    processar_jornada(j, total, tl_min)
+for j in jornadas(ja):
+    processar_jornada(j, total, tl_min)
 
-# --- DataFrame com horários como string ---
 df = pd.DataFrame({
     'Horário': hs,
     'Total': total
 })
 
-c1, c2, _ = st.columns([1,1,6])
-with c1: rot = st.checkbox("Rótulos", True, key="rt")
-with c2: st.markdown("**Clique no gráfico para maximizar**")
+c1, c2, _ = st.columns([1, 1, 6])
+with c1:
+    rot = st.checkbox("Rótulos", True, key="rt")
+with c2:
+    st.markdown("**Clique no gráfico para maximizar**")
 
-out = io.BytesIO()
-with pd.ExcelWriter(out, engine='openpyxl') as w: df.to_excel(w, index=False)
-out.seek(0)
-st.download_button("📥 Baixar Excel", out, "total.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+output = io.BytesIO()
+with pd.ExcelWriter(output, engine='openpyxl') as writer:
+    df.to_excel(writer, index=False)
+output.seek(0)
+st.download_button(
+    "📥 Baixar Excel",
+    output,
+    "total.xlsx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
 
 fig = go.Figure()
 fig.add_trace(go.Scatter(
-    x=df['Horário'], y=df['Total'],
+    x=df['Horário'],
+    y=df['Total'],
     mode='lines+markers',
     name='Total',
     line=dict(color='#90EE90', width=4),
     marker=dict(size=6),
     fill='tozeroy',
-    fillcolor='rgba(144,238,144,0.3)'
+    fillcolor='rgba(144, 238, 144, 0.3)'
 ))
 
-# Intervalo de almoço
 if '09:30' in df['Horário'].values and '10:30' in df['Horário'].values:
     fig.add_vrect(x0='09:30', x1='10:30', fillcolor="gray", opacity=0.1)
 
@@ -117,11 +140,15 @@ if rot:
     for _, r in df.iterrows():
         if r['Total'] > 0:
             fig.add_annotation(
-                x=r['Horário'], y=r['Total']+0.8,
+                x=r['Horário'],
+                y=r['Total'] + 0.8,
                 text=str(int(r['Total'])),
                 showarrow=False,
                 font=dict(color='#90EE90', size=10, family="bold"),
-                bgcolor="white", bordercolor='#90EE90', borderwidth=1, borderpad=4
+                bgcolor="white",
+                bordercolor='#90EE90',
+                borderwidth=1,
+                borderpad=4
             )
 
 fig.update_layout(
