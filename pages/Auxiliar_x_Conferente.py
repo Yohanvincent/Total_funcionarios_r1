@@ -1,4 +1,4 @@
-# pages/1_Conferentes_vs_Auxiliares.py (VISUAL IDÊNTICO AO TOTAL DE FUNCIONÁRIOS)
+# pages/1_Conferentes_vs_Auxiliares.py (COM EXPLICAÇÃO DE UPLOAD)
 
 import streamlit as st
 import pandas as pd
@@ -189,4 +189,21 @@ fig.update_layout(
 
 st.plotly_chart(fig, use_container_width=True)
 
-st.markdown("**Upload - Rotulos - Maximizar - Baixar**")
+# === EXPLICAÇÃO DE UPLOAD ABAIXO DO GRÁFICO ===
+with st.expander("📋 Como preparar os arquivos para upload (Conferentes e Auxiliares)", expanded=False):
+    st.markdown("""
+### Formato das linhas (separadas por espaço):
+
+| Tipo de Jornada | Formato | Exemplo |
+|----------------|--------|--------|
+| **Jornada Completa** (com intervalo) | `entrada saída_intervalo retorno_intervalo saída_final quantidade` | `04:00 09:00 10:15 13:07 27` |
+| **Jornada Meia** (sem intervalo) | `entrada saída_final quantidade` | `17:48 21:48 1` |
+
+### Regras:
+- **Horários no formato `HH:MM`** (24h)
+- **Uma linha por grupo de colaboradores com a mesma jornada**
+- **Quantidade no final** (número inteiro)
+- **Separado por espaços** (não use vírgula ou ponto e vírgula)
+- **Sem cabeçalho** (não coloque títulos como "Entrada", "Saída", etc.)
+
+### Exemplo de arquivo TXT/CSV:
