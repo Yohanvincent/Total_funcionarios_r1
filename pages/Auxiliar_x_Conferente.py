@@ -119,5 +119,3 @@ fig.update_layout(
 )
 
 st.plotly_chart(fig, use_container_width=True)  # <-- LARGURA TOTAL
-
-st.markdown("**Upload → Rótulos → Maximizar → Baixar**")
