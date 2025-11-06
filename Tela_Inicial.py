@@ -65,6 +65,14 @@ with col2:
     ):
         st.switch_page("pages/Producao_vs_Equipe.py")
 
+    # Botão para Capacidade x Produção
+    if st.button(
+        "Capacidade x Produção",
+        use_container_width=True,
+        key="btn_prod"
+    ):
+        st.switch_page("pages/Capacidade_x_Producao.py")
+
 with col3:
     st.markdown("<br>", unsafe_allow_html=True)
 
