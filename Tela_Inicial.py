@@ -39,7 +39,7 @@ with col1:
 with col2:
     # Botão para Auxiliar x Conferente
     if st.button(
-        "👷👷‍♀️🤣 Conferentes x Auxiliares",
+        "👷👷‍♀️ Conferentes x Auxiliares",
         use_container_width=True,
         key="btn_aux_vs_conf"
     ):
