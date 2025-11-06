@@ -110,27 +110,34 @@ margem = 5
 y_max = max(max_cheg, max_said) + margem
 y2_max = max_eq + margem
 
+# Calcula fator de escala para alinhar zeros
+ton_range = y_max
+eq_range = y2_max
+scale = ton_range / eq_range if eq_range > 0 else 1
+
 fig = go.Figure()
 
-# Chegada: verde, positivo
+# Chegada: verde
 fig.add_trace(go.Bar(
     x=df["Horario"], y=df["Chegada_Ton"],
     name="Chegada (ton)", marker_color="#2ECC71", opacity=0.8
 ))
 
-# Saída: vermelha, positivo
+# Saída: vermelha
 fig.add_trace(go.Bar(
     x=df["Horario"], y=df["Saida_Ton"],
     name="Saida (ton)", marker_color="#E74C3C", opacity=0.8
 ))
 
-# Equipe: linha roxa, eixo direito
+# Equipe escalada para o eixo esquerdo
+df["Equipe_Escalada"] = df["Equipe"] * scale
+
 fig.add_trace(go.Scatter(
-    x=df["Horario"], y=df["Equipe"],
+    x=df["Horario"], y=df["Equipe_Escalada"],
     mode="lines+markers", name="Equipe",
     line=dict(color="#9B59B6", width=4),
     marker=dict(size=8),
-    yaxis="y2"
+    yaxis="y"
 ))
 
 if rotulos:
@@ -153,7 +160,7 @@ if rotulos:
             )
         if r["Equipe"] > 0:
             fig.add_annotation(
-                x=r["Horario"], y=r["Equipe"],
+                x=r["Horario"], y=r["Equipe_Escalada"],
                 text=f"{int(r['Equipe'])}",
                 font=dict(color="#9B59B6", size=9),
                 bgcolor="white", bordercolor="#9B59B6", borderwidth=1,
@@ -166,23 +173,15 @@ if rotulos:
 fig.update_layout(
     xaxis_title="Horario",
     yaxis=dict(
-        title="Toneladas (Chegada / Saida)",
+        title="Toneladas (Chegada / Saida) | Equipe (escalada)",
         side="left",
         range=[0, y_max],
         zeroline=False
     ),
-    yaxis2=dict(
-        title="Equipe",
-        side="right",
-        overlaying="y",
-        range=[0, y2_max],
-        position=1.0,
-        showgrid=False
-    ),
     height=650,
     hovermode="x unified",
     legend=dict(x=0, y=1.1, orientation="h"),
-    barmode="stack",  # Empilha barras para melhor visualização
+    barmode="stack",
     margin=dict(l=60, r=60, t=40, b=60)
 )
 
