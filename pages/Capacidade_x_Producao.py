@@ -74,7 +74,7 @@ if rotulos:
             showarrow=False, yshift=10)
         fig.add_annotation(x=r["Hora"], y=r["Capacidade (t)"],
             text=f"{r['Capacidade (t)']:.1f}",
-            font=dict(color="#9B59B6", size=9),
+            font=dict(color="#90EE90", size=9),
             bgcolor="white", bordercolor="#9B59B6", borderwidth=1,
             showarrow=False, yshift=0)
 
