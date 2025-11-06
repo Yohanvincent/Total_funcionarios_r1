@@ -111,8 +111,6 @@ margem_eq = 5
 
 y_min = -max_said - margem_ton
 y_max = max_cheg + margem_ton
-y2_min = 0
-y2_max = max_eq + margem_eq
 
 fig = go.Figure()
 
@@ -140,25 +138,25 @@ if rotulos:
             fig.add_annotation(
                 x=r["Horario"], y=r["Chegada_Ton"],
                 text=f"{r['Chegada_Ton']}",
-                font=dict(color="white", size=9),
-                bgcolor="#2ECC71", bordercolor="#2ECC71", borderwidth=1,
+                font=dict(color="#2ECC71", size=9),
+                bgcolor="white", bordercolor="#2ECC71", borderwidth=1,
                 showarrow=False, yshift=10
             )
         if r["Saida_Ton"] > 0:
             fig.add_annotation(
                 x=r["Horario"], y=-r["Saida_Ton"],
                 text=f"{r['Saida_Ton']}",
-                font=dict(color="white", size=9),
-                bgcolor="#E74C3C", bordercolor="#E74C3C", borderwidth=1,
+                font=dict(color="#E74C3C", size=9),
+                bgcolor="white", bordercolor="#E74C3C", borderwidth=1,
                 showarrow=False, yshift=-10
             )
         if r["Equipe"] > 0:
             fig.add_annotation(
                 x=r["Horario"], y=r["Equipe"],
                 text=f"{int(r['Equipe'])}",
-                font=dict(color="white", size=9),
-                bgcolor="#9B59B6", bordercolor="#9B59B6", borderwidth=1,
-                showarrow=False, yshift=10
+                font=dict(color="#9B59B6", size=9),
+                bgcolor="white", bordercolor="#9B59B6", borderwidth=1,
+                showarrow=False, yshift=8  # Próximo ao marcador
             )
 
 fig.update_layout(
@@ -173,7 +171,8 @@ fig.update_layout(
         title="Equipe",
         side="right",
         overlaying="y",
-        range=[y2_min, y2_max],
+        range=[0, max_eq + margem_eq],
+        matches=None,  # Permite escala independente
         zeroline=False
     ),
     height=650,
