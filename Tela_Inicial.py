@@ -2,11 +2,10 @@
 # =============================================
 # OBJETIVO: Página inicial com navegação direta para as abas
 # FUNCIONALIDADES:
-#   • Dois botões grandes e intuitivos
-#   • Redirecionamento imediato via st.switch_page()
-#   • Layout centralizado e responsivo
+# • Três botões grandes e intuitivos
+# • Redirecionamento imediato via st.switch_page()
+# • Layout centralizado e responsivo
 # =============================================
-
 import streamlit as st
 
 # =============================================
@@ -40,7 +39,7 @@ with col1:
 with col2:
     # Botão para Auxiliar x Conferente
     if st.button(
-        "👷👷‍♀️ Conferentes x Auxiliares",
+        "Conferentes x Auxiliares",
         use_container_width=True,
         key="btn_aux_vs_conf"
     ):
@@ -50,11 +49,13 @@ with col2:
 
     # Botão para Total de Funcionários
     if st.button(
-        "🧮Total de Funcionários",
+        "Total de Funcionários",
         use_container_width=True,
         key="btn_total"
     ):
         st.switch_page("pages/Total_Funcionarios.py")
+
+    st.markdown("<br>", unsafe_allow_html=True)
 
     # Botão para Produção vs Equipe
     if st.button(
