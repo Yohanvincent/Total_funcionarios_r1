@@ -46,7 +46,6 @@ def extrair(texto):
 
 cheg, said = extrair(texto)
 
-# TODAS AS HORAS UNICAS (chegadas + saidas + equipe)
 todas = set(cheg.keys()) | set(said.keys())
 
 padrao_conf = "00:00 04:00 05:15 09:33 9\n04:00 09:00 10:15 13:07 27\n04:30 08:30 10:30 15:14 1\n06:00 11:00 12:15 16:03 1\n07:45 12:00 13:15 17:48 1\n08:00 12:00 13:15 18:03 2\n10:00 12:00 14:00 20:48 11\n12:00 16:00 17:15 22:02 8\n13:00 16:00 17:15 22:55 5\n15:45 18:00 18:15 22:00 7\n16:30 19:30 19:45 22:39 2"
@@ -93,7 +92,6 @@ def aplicar(j, lista, tl):
 for j in jornadas(padrao_conf): aplicar(j, eq, tl)
 for j in jornadas(padrao_aux): aplicar(j, eq, tl)
 
-# VALORES EXATOS POR HORA (1 casa decimal)
 cheg_val = [round(cheg.get(h, 0), 1) for h in horarios]
 said_val = [round(said.get(h, 0), 1) for h in horarios]
 
@@ -104,25 +102,31 @@ df = pd.DataFrame({
     "Equipe": eq
 })
 
+# Calcula max/min para eixo Y
+max_cheg = max(cheg_val) if cheg_val else 0
+max_said = max(said_val) if said_val else 0
+y_max = max_cheg + 5
+y_min = -max_said - 5
+
 fig = go.Figure()
 
-# Barras: Chegada (verde)
+# Chegada (verde)
 fig.add_trace(go.Bar(
     x=df["Horario"], y=df["Chegada_Ton"],
     name="Chegada (ton)", marker_color="#2ECC71", opacity=0.8
 ))
 
-# Barras: Saida (vermelho)
+# Saida (vermelho, abaixo do zero)
 fig.add_trace(go.Bar(
-    x=df["Horario"], y=-df["Saida_Ton"],  # negativo para baixo
+    x=df["Horario"], y=-df["Saida_Ton"],
     name="Saida (ton)", marker_color="#E74C3C", opacity=0.8
 ))
 
-# Linha: Equipe
+# Equipe (roxo, eixo direito)
 fig.add_trace(go.Scatter(
     x=df["Horario"], y=df["Equipe"],
     mode="lines+markers", name="Equipe",
-    line=dict(color="#4ECDC4", width=4), yaxis="y2"
+    line=dict(color="#9B59B6", width=4), yaxis="y2"
 ))
 
 if rotulos:
@@ -132,12 +136,12 @@ if rotulos:
         if r["Saida_Ton"] > 0:
             fig.add_annotation(x=r["Horario"], y=-r["Saida_Ton"], text=f"<b>{r['Saida_Ton']}</b>", showarrow=False, font=dict(color="#E74C3C", size=9), yshift=-10)
         if r["Equipe"] > 0:
-            fig.add_annotation(x=r["Horario"], y=r["Equipe"], text=f"<b>{int(r['Equipe'])}</b>", showarrow=False, font=dict(color="#4ECDC4", size=9), yshift=10)
+            fig.add_annotation(x=r["Horario"], y=r["Equipe"], text=f"<b>{int(r['Equipe'])}</b>", showarrow=False, font=dict(color="#9B59B6", size=9), yshift=10)
 
 fig.update_layout(
     xaxis_title="Horario",
-    yaxis=dict(title="Toneladas (Chegada + / Saida -)", side="left"),
-    yaxis2=dict(title="Equipe", side="right", overlaying="y"),
+    yaxis=dict(title="Toneladas (Chegada + / Saida -)", side="left", range=[y_min, y_max]),
+    yaxis2=dict(title="Equipe", side="right", overlaying="y", range=[0, max(eq) + 5] if eq else [0, 10]),
     height=600,
     hovermode="x unified",
     legend=dict(x=0, y=1.1, orientation="h"),
