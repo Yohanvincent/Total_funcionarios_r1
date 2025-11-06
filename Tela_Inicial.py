@@ -39,7 +39,7 @@ with col1:
 with col2:
     # Botão para Auxiliar x Conferente
     if st.button(
-        "Conferentes x Auxiliares",
+        "👷👷‍♀️ Conferentes x Auxiliares",
         use_container_width=True,
         key="btn_aux_vs_conf"
     ):
@@ -49,7 +49,7 @@ with col2:
 
     # Botão para Total de Funcionários
     if st.button(
-        "Total de Funcionários",
+        "🧮 Total de Funcionários",
         use_container_width=True,
         key="btn_total"
     ):
@@ -59,7 +59,7 @@ with col2:
 
     # Botão para Produção vs Equipe
     if st.button(
-        "Produção vs Equipe",
+        "📶 Produção vs Equipe",
         use_container_width=True,
         key="btn_prod"
     ):
@@ -69,7 +69,7 @@ with col2:
 
     # Botão para Capacidade x Produção
     if st.button(
-        "Capacidade x Produção",
+        "📊 Capacidade x Produção",
         use_container_width=True,
         key="btn_capac"
     ):
