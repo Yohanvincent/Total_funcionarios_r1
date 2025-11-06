@@ -1,3 +1,4 @@
+# pages/3_Producao_vs_Equipe.py
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -43,6 +44,9 @@ def extrair(texto):
 
 cheg, said = extrair(texto)
 
+# TODAS AS HORAS UNICAS (equipe + chegadas + saidas)
+todas_horas = set(cheg.keys()) | set(said.keys())
+
 padrao_conf = "00:00 04:00 05:15 09:33 9\n04:00 09:00 10:15 13:07 27\n04:30 08:30 10:30 15:14 1\n06:00 11:00 12:15 16:03 1\n07:45 12:00 13:15 17:48 1\n08:00 12:00 13:15 18:03 2\n10:00 12:00 14:00 20:48 11\n12:00 16:00 17:15 22:02 8\n13:00 16:00 17:15 22:55 5\n15:45 18:00 18:15 22:00 7\n16:30 19:30 19:45 22:39 2"
 padrao_aux = "00:00 04:00 05:15 09:33 10\n04:00 09:00 10:15 13:07 17\n12:00 16:00 17:15 22:02 2\n13:00 16:00 17:15 22:55 3\n15:45 18:00 18:15 22:00 3\n16:30 19:30 19:45 22:39 2\n17:48 21:48 1\n18:00 22:00 19\n19:00 22:52 5"
 
@@ -66,8 +70,10 @@ def horarios(jc, ja):
             if len(p) in (3,5): h.update(p[:-1])
     return sorted(h, key=min)
 
-hrs = horarios(padrao_conf, padrao_aux)
-tl = [min(h) for h in hrs]
+horas_equipe = horarios(padrao_conf, padrao_aux)
+todas_horas.update(horas_equipe)
+horarios_ordenados = sorted(todas_horas, key=min)
+tl = [min(h) for h in horarios_ordenados]
 eq = [0] * len(tl)
 
 def aplicar(j, lista, tl):
@@ -85,27 +91,42 @@ def aplicar(j, lista, tl):
 for j in jornadas(padrao_conf): aplicar(j, eq, tl)
 for j in jornadas(padrao_aux): aplicar(j, eq, tl)
 
-prod_h = {h:0.0 for h in hrs}
-for h,v in cheg.items():
-    if h in prod_h: prod_h[h] += v
+# PRODUCAO: soma de chegadas - saidas (estoque acumulado por hora)
+acumulado = 0.0
+producao_acumulada = []
+for h in horarios_ordenados:
+    acumulado += cheg.get(h, 0)
+    acumulado -= said.get(h, 0)
+    producao_acumulada.append(round(acumulado, 3))
 
-df = pd.DataFrame({"Horario":hrs, "Equipe":eq, "Producao_Ton":[prod_h[h] for h in hrs]})
+df = pd.DataFrame({
+    "Horario": horarios_ordenados,
+    "Equipe": eq,
+    "Estoque_Ton": producao_acumulada
+})
 
 fig = go.Figure()
-fig.add_trace(go.Bar(x=df["Horario"], y=df["Producao_Ton"], name="Producao", marker_color="#FF6B6B", opacity=0.7))
-fig.add_trace(go.Scatter(x=df["Horario"], y=df["Equipe"], mode="lines+markers", name="Equipe", line=dict(color="#4ECDC4", width=4), yaxis="y2"))
+fig.add_trace(go.Bar(
+    x=df["Horario"], y=df["Estoque_Ton"],
+    name="Estoque (ton)", marker_color="#FF6B6B", opacity=0.8
+))
+fig.add_trace(go.Scatter(
+    x=df["Horario"], y=df["Equipe"],
+    mode="lines+markers", name="Equipe",
+    line=dict(color="#4ECDC4", width=4), yaxis="y2"
+))
 
 if rotulos:
     for _, r in df.iterrows():
-        if r["Producao_Ton"] > 0:
-            fig.add_annotation(x=r["Horario"], y=r["Producao_Ton"], text=f"<b>{r['Producao_Ton']:.1f}</b>", showarrow=False, font=dict(color="#FF6B6B", size=9), yshift=10)
+        if r["Estoque_Ton"] > 0:
+            fig.add_annotation(x=r["Horario"], y=r["Estoque_Ton"], text=f"<b>{r['Estoque_Ton']}</b>", showarrow=False, font=dict(color="#FF6B6B", size=9), yshift=10)
         if r["Equipe"] > 0:
             fig.add_annotation(x=r["Horario"], y=r["Equipe"], text=f"<b>{int(r['Equipe'])}</b>", showarrow=False, font=dict(color="#4ECDC4", size=9), yshift=10)
 
 fig.update_layout(
     xaxis_title="Horario",
-    yaxis=dict(title="Toneladas", side="left"),
-    yaxis2=dict(title="Equipe", side="right", overlaying="y"),
+    yaxis=dict(title="Estoque Acumulado (ton)", side="left"),
+    yaxis2=dict(title="Equipe Disponivel", side="right", overlaying="y"),
     height=600,
     hovermode="x unified",
     legend=dict(x=0, y=1.1, orientation="h")
@@ -124,11 +145,11 @@ if st.session_state.prod_name:
 out = io.BytesIO()
 with pd.ExcelWriter(out, engine="openpyxl") as w: df.to_excel(w, index=False)
 out.seek(0)
-st.download_button("Baixar Excel", out, "producao.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+st.download_button("Baixar Excel", out, "estoque_vs_equipe.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 if st.session_state.prod_name:
     st.markdown("### Dados Carregados")
     st.code(texto, language="text")
 
 with st.expander("Formato do arquivo"):
-    st.markdown("Cheg. Ton.\n01:00 7,278041\n...\nSaida Ton.\n21:00 6,061068\n- HH:MM valor\n- Virgula ou ponto")
+    st.markdown("Cheg. Ton.\n01:00 7,278041\n...\nSaida Ton.\n21:00 6,061068\n- HH:MM valor\n- Virgula ou ponto\n- Multiplas linhas na mesma hora sao somadas")
