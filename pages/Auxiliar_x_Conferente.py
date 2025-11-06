@@ -1,4 +1,4 @@
-# pages/1_Conferentes_vs_Auxiliares.py (CACHE PERSISTENTE ENTRE ABAS + DOCUMENTAÇÃO)
+# pages/1_Conferentes_vs_Auxiliares.py (PERSISTÊNCIA + VISUALIZAÇÃO DO UPLOAD)
 
 import streamlit as st
 import pandas as pd
@@ -14,40 +14,46 @@ st.title("Disponibilidade: Conferentes vs Auxiliares")
 st.markdown("**Upload (Excel/CSV/TXT) ou use padrão.**")
 
 # =============================================
-# CACHE GLOBAL COM st.session_state
+# PERSISTÊNCIA COM st.session_state (NÃO SOME ENTRE ABAS)
 # =============================================
-# Problema anterior: @st.cache_data não persiste entre páginas diferentes
-# Solução: Usar st.session_state com chave única por página
-# Isso mantém o upload mesmo ao trocar de aba e voltar
-
-if "conf_data" not in st.session_state:
-    st.session_state.conf_data = None
-if "aux_data" not in st.session_state:
-    st.session_state.aux_data = None
+if "conf_bytes" not in st.session_state:
+    st.session_state.conf_bytes = None
+if "aux_bytes" not in st.session_state:
+    st.session_state.aux_bytes = None
+if "conf_name" not in st.session_state:
+    st.session_state.conf_name = None
+if "aux_name" not in st.session_state:
+    st.session_state.aux_name = None
 
 # =============================================
-# UPLOADERS COM PERSISTÊNCIA
+# UPLOADERS COM VISUALIZAÇÃO DO NOME DO ARQUIVO
 # =============================================
 c1, c2 = st.columns(2)
 with c1:
     up_conf = st.file_uploader(
         "Conferentes",
         ["txt", "csv", "xlsx"],
-        key="conf_uploader",  # Chave única evita recarregar
-        help="Faça upload e troque de aba: os dados permanecem!"
+        key="conf_uploader",
+        help="Upload persiste entre abas"
     )
     if up_conf is not None:
-        st.session_state.conf_data = up_conf.getvalue()
+        st.session_state.conf_bytes = up_conf.getvalue()
+        st.session_state.conf_name = up_conf.name
+    # Mostra nome do arquivo carregado
+    if st.session_state.conf_name:
+        st.success(f"Conferentes: **{st.session_state.conf_name}**")
 
 with c2:
     up_aux = st.file_uploader(
         "Auxiliares",
         ["txt", "csv", "xlsx"],
-        key="aux_uploader",
-        help="Upload persiste entre abas"
+        key="aux_uploader"
     )
     if up_aux is not None:
-        st.session_state.aux_data = up_aux.getvalue()
+        st.session_state.aux_bytes = up_aux.getvalue()
+        st.session_state.aux_name = up_aux.name
+    if st.session_state.aux_name:
+        st.success(f"Auxiliares: **{st.session_state.aux_name}**")
 
 # =============================================
 # DADOS PADRÃO
@@ -66,31 +72,24 @@ padrao_aux = (
 )
 
 # =============================================
-# FUNÇÃO DE LEITURA (REUTILIZÁVEL)
+# LEITURA DOS ARQUIVOS
 # =============================================
-def ler_arquivo_bytes(bytes_data):
-    """Converte bytes em string com quebras de linha."""
+def ler_bytes(bytes_data, fallback):
     if bytes_data is None:
-        return None
+        return fallback
     try:
         return bytes_data.decode("utf-8")
     except:
-        # Fallback para Excel: tenta ler como binário
         df = pd.read_excel(io.BytesIO(bytes_data), header=None)
         return "\n".join(" ".join(map(str, row)) for row in df.values)
 
-# Carrega dados do session_state ou padrão
-jc_raw = st.session_state.conf_data or padrao_conf.encode()
-ja_raw = st.session_state.aux_data or padrao_aux.encode()
-
-jc = ler_arquivo_bytes(jc_raw)
-ja = ler_arquivo_bytes(ja_raw)
+jc = ler_bytes(st.session_state.conf_bytes, padrao_conf)
+ja = ler_bytes(st.session_state.aux_bytes, padrao_aux)
 
 # =============================================
-# PROCESSAMENTO DE JORNADAS
+# PROCESSAMENTO
 # =============================================
 def extrair_jornadas(texto):
-    """Extrai jornadas do texto."""
     jornadas = []
     for linha in texto.strip().split("\n"):
         p = linha.strip().split()
@@ -116,9 +115,6 @@ def coletar_horarios(jc, ja):
                 h.update(p[:-1])
     return sorted(h, key=minutos)
 
-# =============================================
-# CÁLCULO
-# =============================================
 horarios = coletar_horarios(jc, ja)
 timeline = [minutos(h) for h in horarios]
 conf = [0] * len(timeline)
@@ -152,7 +148,7 @@ c1, c2, _ = st.columns([1, 1, 6])
 with c1:
     rotulos = st.checkbox("Rótulos", True)
 with c2:
-    st.markdown("**Upload persiste ao trocar de aba!**")
+    st.markdown("**Upload persiste entre abas!**")
 
 # Download
 output = io.BytesIO()
@@ -221,6 +217,21 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 # =============================================
+# VISUALIZAÇÃO DOS DADOS CARREGADOS
+# =============================================
+if st.session_state.conf_name or st.session_state.aux_name:
+    st.markdown("### 📄 **Dados carregados (visualização)**")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.session_state.conf_name:
+            st.markdown(f"**Conferentes: {st.session_state.conf_name}**")
+            st.code(jc, language="text")
+    with col2:
+        if st.session_state.aux_name:
+            st.markdown(f"**Auxiliares: {st.session_state.aux_name}**")
+            st.code(ja, language="text")
+
+# =============================================
 # EXPLICAÇÃO
 # =============================================
 with st.expander("📋 Como preparar os arquivos"):
@@ -234,4 +245,4 @@ with st.expander("📋 Como preparar os arquivos"):
         "- Copie do Excel → Bloco de Notas → `.txt`"
     )
 
-st.success("✅ **Upload agora persiste entre abas!**")
+st.success("✅ **Upload persiste + dados visíveis abaixo do gráfico!**")
