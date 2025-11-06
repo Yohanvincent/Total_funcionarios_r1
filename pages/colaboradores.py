@@ -1,8 +1,12 @@
+# pages/1_Conferentes_vs_Auxiliares.py (ATUALIZADO PARA LARGURA TOTAL)
+
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import io
+
+st.set_page_config(layout="wide")  # <-- FORÇA LARGURA TOTAL
 
 st.title("Disponibilidade: Conferentes vs Auxiliares")
 st.markdown("**Upload (Excel/CSV/TXT) ou use padrão.**")
@@ -105,7 +109,15 @@ if rot:
     for _, r in df.iterrows():
         if r['Conferentes']>0: fig.add_annotation(x=r['Horário'], y=r['Conferentes']+0.8, text=str(int(r['Conferentes'])), showarrow=False, font=dict(color='#90EE90'))
         if r['Auxiliares']>0: fig.add_annotation(x=r['Horário'], y=r['Auxiliares']+0.8, text=str(int(r['Auxiliares'])), showarrow=False, font=dict(color='#228B22'))
-fig.update_layout(title="Disponibilidade", xaxis_title="Horário", yaxis_title="Pessoas", height=600, hovermode="x unified")
-st.plotly_chart(fig, use_container_width=True)
+fig.update_layout(
+    title="Disponibilidade de Equipe",
+    xaxis_title="Horário",
+    yaxis_title="Pessoas",
+    height=600,
+    hovermode="x unified",
+    margin=dict(l=40, r=40, t=80, b=40)  # <-- AJUSTE DE MARGENS
+)
+
+st.plotly_chart(fig, use_container_width=True)  # <-- LARGURA TOTAL
 
 st.markdown("**Upload → Rótulos → Maximizar → Baixar**")
