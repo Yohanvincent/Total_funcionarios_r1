@@ -23,7 +23,7 @@ st.set_page_config(
 st.markdown(
     """
     <h1 style='text-align: center; margin-bottom: 50px;'>
-        Teste
+        Excelência Operacional - Dados (Capacidade / Produtividade)
     </h1>
     """,
     unsafe_allow_html=True
@@ -40,7 +40,7 @@ with col1:
 with col2:
     # Botão para Auxiliar x Conferente
     if st.button(
-        "Conferentes vs Auxiliares",
+        "👷Conferentes vs 👷‍♀️Auxiliares",
         use_container_width=True,
         key="btn_aux_vs_conf"
     ):
@@ -50,7 +50,7 @@ with col2:
 
     # Botão para Total de Funcionários
     if st.button(
-        "Total de Funcionários",
+        "🧮Total de Funcionários",
         use_container_width=True,
         key="btn_total"
     ):
