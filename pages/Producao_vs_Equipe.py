@@ -155,7 +155,7 @@ if rotulos:
                 text=f"{int(r['Equipe'])}",
                 font=dict(color="#9B59B6", size=9),
                 bgcolor="white", bordercolor="#9B59B6", borderwidth=1,
-                showarrow=False, yshift=8
+                showarrow=False, yshift=5  # Super colado na bolinha
             )
 
 fig.update_layout(
@@ -171,7 +171,7 @@ fig.update_layout(
         side="right",
         overlaying="y",
         range=[0, y2_max],
-        position=1.0,  # Alinha visualmente com o zero
+        position=1.0,
         showgrid=False
     ),
     height=650,
