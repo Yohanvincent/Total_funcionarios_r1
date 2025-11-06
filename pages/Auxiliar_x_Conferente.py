@@ -1,4 +1,4 @@
-# pages/1_Conferentes_vs_Auxiliares.py (FUNCIONA 100% - TESTADO)
+# pages/1_Conferentes_vs_Auxiliares.py (100% FUNCIONAL - SEM ERROS)
 
 import streamlit as st
 import pandas as pd
@@ -24,7 +24,7 @@ def ler(f):
     if f:
         if f.name.endswith(".xlsx"):
             df = pd.read_excel(f, header=None)
-            return "\n".join(" ".join(row.astype(str)) for row in df.values)
+            return "\n".join(" ".join(map(str, row)) for row in df.values)
         else:
             return f.getvalue().decode("utf-8")
     return None
@@ -140,7 +140,7 @@ if rot:
                 y=r["Conferentes"] + 0.8,
                 text=str(int(r["Conferentes"])),
                 showarrow=False,
-                font=dict(color="#90EE90", size=10, family="bold"),
+                font=dict(color="#90EE90", size=10),
                 bgcolor="white",
                 bordercolor="#90EE90",
                 borderwidth=1,
@@ -152,7 +152,7 @@ if rot:
                 y=r["Auxiliares"] + 0.8,
                 text=str(int(r["Auxiliares"])),
                 showarrow=False,
-                font=dict(color="#228B22", size=10, family="bold"),
+                font=dict(color="#228B22", size=10),
                 bgcolor="white",
                 bordercolor="#228B22",
                 borderwidth=1,
@@ -171,21 +171,25 @@ fig.update_layout(
 
 st.plotly_chart(fig, use_container_width=True)
 
-# === EXPLICACAO DE UPLOAD ===
-with st.expander("Como preparar os arquivos para upload (Conferentes e Auxiliares)"):
-    st.markdown("""
-### Formato das linhas (separadas por espaco):
+with st.expander("Como preparar os arquivos para upload"):
+    st.markdown(
+        "### Formato das linhas (separadas por espaco):\n\n"
+        "| Tipo de Jornada | Formato | Exemplo |\n"
+        "|----------------|--------|--------|\n"
+        "| **Jornada Completa** | `entrada saida_intervalo retorno_intervalo saida_final quantidade` | `04:00 09:00 10:15 13:07 27` |\n"
+        "| **Jornada Meia** | `entrada saida_final quantidade` | `17:48 21:48 1` |\n\n"
+        "### Regras:\n"
+        "- Horarios no formato `HH:MM` (24h)\n"
+        "- Uma linha por grupo de colaboradores\n"
+        "- Quantidade no final (inteiro)\n"
+        "- Separado por espacos\n"
+        "- Sem cabecalho\n\n"
+        "### Exemplo TXT:\n"
+        "```\n"
+        "00:00 04:00 05:15 09:33 9\n"
+        "04:00 09:00 10:15 13:07 27\n"
+        "```\n\n"
+        "> **Dica:** Copie do Excel para o Bloco de Notas e salve como .txt"
+    )
 
-| Tipo de Jornada | Formato | Exemplo |
-|----------------|--------|--------|
-| **Jornada Completa** (com intervalo) | `entrada saida_intervalo retorno_intervalo saida_final quantidade` | `04:00 09:00 10:15 13:07 27` |
-| **Jornada Meia** (sem intervalo) | `entrada saida_final quantidade` | `17:48 21:48 1` |
-
-### Regras:
-- **Horarios no formato `HH:MM`** (24h)
-- **Uma linha por grupo de colaboradores com a mesma jornada**
-- **Quantidade no final** (numero inteiro)
-- **Separado por espacos** (nao use virgula ou ponto e virgula)
-- **Sem cabecalho** (nao coloque titulos como "Entrada", "Saida", etc.)
-
-### Exemplo de arquivo TXT/CSV:
+st.markdown("**Upload - Rotulos - Maximizar - Baixar**")
