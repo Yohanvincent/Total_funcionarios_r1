@@ -65,6 +65,8 @@ with col2:
     ):
         st.switch_page("pages/Producao_vs_Equipe.py")
 
+    st.markdown("<br>", unsafe_allow_html=True)
+
     # Botão para Capacidade x Produção
     if st.button(
         "Capacidade x Produção",
