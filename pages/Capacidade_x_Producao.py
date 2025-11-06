@@ -2,15 +2,13 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 
-# -----------------------------
-# Configuração da página
-# -----------------------------
-st.set_page_config(page_title="Capacidade x Produção", layout="wide")
-st.title("📊 Capacidade x Produção")
+st.set_page_config(layout="wide")
+st.title("Capacidade x Produção")
 
-# -----------------------------
-# Entrada do fator dinâmico
-# -----------------------------
+# --- Checkbox de rótulos ---
+rotulos = st.checkbox("Exibir rótulos", True)
+
+# --- Fator dinâmico (input lateral) ---
 st.sidebar.header("Configurações")
 fator_dinamico = st.sidebar.number_input(
     "Fator Dinâmico (vol/kg)",
@@ -22,9 +20,7 @@ fator_dinamico = st.sidebar.number_input(
 
 st.write(f"**Fator atual:** {fator_dinamico:.2f}")
 
-# -----------------------------
-# Dados base de capacidade por hora
-# -----------------------------
+# --- Dados base de capacidade ---
 dados_capacidade = {
     "Hora": [
         "00:00","01:00","02:00","03:00","04:00","05:00","06:00","07:00",
@@ -41,81 +37,71 @@ dados_capacidade = {
 
 df = pd.DataFrame(dados_capacidade)
 
-# -----------------------------
-# Cálculo da Capacidade Ajustada
-# -----------------------------
-df["Capacidade Ajustada"] = df["Capacidade"] * 1000 * fator_dinamico
+# --- Cálculo da capacidade ajustada ---
+df["Capacidade Ajustada"] = (df["Capacidade"] * 1000 * fator_dinamico) / 1000  # converte para toneladas
+df["Capacidade Ajustada"] = df["Capacidade Ajustada"].round(0)
 
-# -----------------------------
-# Produção simulada (ou real se tiver dataframe pronto)
-# -----------------------------
-# Aqui você pode substituir pela leitura do seu dataframe real
-df["Produção"] = [3500000,3000000,3200000,2800000,4200000,4400000,4600000,4800000,
-                  5100000,4900000,3800000,4000000,4200000,4400000,4600000,4800000,
-                  4700000,4500000,4900000,5100000,5300000,5200000,4800000,4600000]
+# --- Simulação ou integração de produção real ---
+# Aqui você pode substituir futuramente pelos dados reais vindos da aba Produção vs Equipe
+df["Produção"] = [
+    7, 6, 8, 5, 9, 10, 12, 15, 16, 13, 9, 10, 11, 12, 13, 15, 14, 13, 17, 18, 19, 18, 16, 14
+]
 
-# -----------------------------
-# Gráfico combinado
-# -----------------------------
+# --- Gráfico ---
 fig = go.Figure()
 
-# Barras da produção
+# Barras da produção (vermelhas)
 fig.add_trace(go.Bar(
-    x=df["Hora"],
-    y=df["Produção"],
-    name="Produção",
-    marker_color="red",
-    yaxis="y1"
+    x=df["Hora"], y=df["Produção"],
+    name="Produção (ton)",
+    marker_color="#E74C3C", opacity=0.85
 ))
 
-# Linha da capacidade ajustada
+# Linha da capacidade (roxa)
 fig.add_trace(go.Scatter(
-    x=df["Hora"],
-    y=df["Capacidade Ajustada"],
-    name="Capacidade Ajustada",
+    x=df["Hora"], y=df["Capacidade Ajustada"],
+    name="Capacidade (ton)",
     mode="lines+markers",
-    line=dict(color="purple", width=3),
-    yaxis="y2"
+    line=dict(color="#9B59B6", width=4),
+    marker=dict(size=7),
 ))
 
-# -----------------------------
-# Layout do gráfico
-# -----------------------------
+# --- Rótulos ---
+if rotulos:
+    for _, r in df.iterrows():
+        if r["Produção"] > 0:
+            fig.add_annotation(x=r["Hora"], y=r["Produção"],
+                text=f"{int(r['Produção'])}",
+                font=dict(color="#E74C3C", size=9),
+                bgcolor="white", bordercolor="#E74C3C", borderwidth=1,
+                showarrow=False, yshift=10)
+        if r["Capacidade Ajustada"] > 0:
+            fig.add_annotation(x=r["Hora"], y=r["Capacidade Ajustada"],
+                text=f"{int(r['Capacidade Ajustada'])}",
+                font=dict(color="#9B59B6", size=9),
+                bgcolor="white", bordercolor="#9B59B6", borderwidth=1,
+                showarrow=False, yshift=0)
+
+# --- Layout do gráfico ---
+max_y = max(df["Capacidade Ajustada"].max(), df["Produção"].max()) * 1.1
+
 fig.update_layout(
-    title="Comparativo: Capacidade x Produção",
-    xaxis=dict(title="Hora"),
-    yaxis=dict(
-        title="Produção (unidades)",
-        side="left",
-        showgrid=False,
-        zeroline=True,
-        zerolinewidth=2,
-        zerolinecolor="gray"
-    ),
-    yaxis2=dict(
-        title="Capacidade Ajustada",
-        overlaying="y",
-        side="right",
-        showgrid=False,
-        zeroline=True,
-        zerolinewidth=2,
-        zerolinecolor="gray"
-    ),
+    xaxis_title="Hora",
+    yaxis=dict(title="Toneladas", range=[0, max_y]),
+    height=650,
+    hovermode="x unified",
+    legend=dict(x=0, y=1.1, orientation="h"),
     barmode="group",
-    legend=dict(orientation="h", y=-0.2),
-    template="plotly_white",
-    height=600
+    margin=dict(l=60, r=60, t=40, b=60),
+    plot_bgcolor="white",
 )
 
-# -----------------------------
-# Exibição
-# -----------------------------
 st.plotly_chart(fig, use_container_width=True)
 
-# Exibe tabela para conferência
+# --- Tabela expandida ---
 with st.expander("📋 Ver dados detalhados"):
     st.dataframe(df.style.format({
-        "Capacidade": "{:,.2f}",
-        "Capacidade Ajustada": "{:,.2f}",
+        "Capacidade": "{:,.0f}",
+        "Capacidade Ajustada": "{:,.0f}",
         "Produção": "{:,.0f}"
     }))
