@@ -1,9 +1,8 @@
-# pages/2_Total_Funcionarios.py (MESMA LÓGICA DO GRÁFICO CONFERENTES VS AUXILIARES)
+# pages/2_Total_Funcionarios.py (CORRIGIDO: SEM DATETIME NO EIXO X)
 
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import datetime
 import io
 
 st.set_page_config(layout="wide")
@@ -84,7 +83,7 @@ def proc(j, lst, tl):
 for j in jornadas(jc): proc(j, total, tl_min)
 for j in jornadas(ja): proc(j, total, tl_min)
 
-# --- DataFrame com horários originais ---
+# --- DataFrame com horários como string ---
 df = pd.DataFrame({
     'Horário': hs,
     'Total': total
@@ -110,7 +109,7 @@ fig.add_trace(go.Scatter(
     fillcolor='rgba(144,238,144,0.3)'
 ))
 
-# Intervalo de almoço (se existir 09:30 e 10:30)
+# Intervalo de almoço
 if '09:30' in df['Horário'].values and '10:30' in df['Horário'].values:
     fig.add_vrect(x0='09:30', x1='10:30', fillcolor="gray", opacity=0.1)
 
@@ -126,7 +125,7 @@ if rot:
             )
 
 fig.update_layout(
-    title="Total de Funcionários (mesma lógica do gráfico Conferentes vs Auxiliares)",
+    title="Total de Funcionários",
     xaxis_title="Horário",
     yaxis_title="Total",
     height=600,
