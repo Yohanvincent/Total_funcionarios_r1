@@ -6,10 +6,9 @@ from plotly.subplots import make_subplots
 import io
 
 st.title("Disponibilidade de Equipe: Conferentes vs Auxiliares")
+st.markdown("**Upload de dados (Excel/CSV/TXT) ou use os dados padrão.**")
 
-st.markdown("**Upload de dados (Excel/CSV) ou use os dados padrão abaixo.**")
-
-# --- Upload de arquivos ---
+# --- Upload ---
 col1, col2 = st.columns(2)
 with col1:
     uploaded_conf = st.file_uploader("Jornada Conferentes", type=["txt", "csv", "xlsx"], key="conf")
@@ -30,6 +29,7 @@ jornada_conferentes_padrao = """
 15:45 18:00 18:15 22:00 7
 16:30 19:30 19:45 22:39 2
 """
+
 jornada_auxiliares_padrao = """
 00:00 04:00 05:15 09:33 10
 04:00 09:00 10:15 13:07 17
@@ -42,7 +42,7 @@ jornada_auxiliares_padrao = """
 19:00 22:52 5
 """
 
-# --- Leitura dos dados ---
+# --- Leitura de arquivo ---
 def ler_arquivo(uploaded_file):
     if uploaded_file is not None:
         if uploaded_file.name.endswith('.xlsx'):
@@ -55,7 +55,7 @@ def ler_arquivo(uploaded_file):
 jornada_conferentes = ler_arquivo(uploaded_conf) or jornada_conferentes_padrao
 jornada_auxiliares = ler_arquivo(uploaded_aux) or jornada_auxiliares_padrao
 
-# ===================== FUNÇÃO: LER JORNADAS =====================
+# --- Funções ---
 def ler_jornadas(texto):
     jornadas = []
     for linha in texto.strip().split('\n'):
@@ -64,104 +64,88 @@ def ler_jornadas(texto):
             continue
         partes = linha.split()
         if len(partes) == 5:
-            entrada, saida_intervalo, retorno_intervalo, saida_final, qtd_str = partes
             try:
-                quantidade = int(qtd_str)
+                qtd = int(partes[4])
                 jornadas.append({
                     'tipo': 'completa',
-                    'entrada': entrada,
-                    'saida_intervalo': saida_intervalo,
-                    'retorno_intervalo': retorno_intervalo,
-                    'saida_final': saida_final,
-                    'quantidade': quantidade
+                    'entrada': partes[0],
+                    'saida_intervalo': partes[1],
+                    'retorno_intervalo': partes[2],
+                    'saida_final': partes[3],
+                    'quantidade': qtd
                 })
-            except ValueError:
+            except:
                 continue
         elif len(partes) == 3:
-            entrada, saida_final, qtd_str = partes
             try:
-                quantidade = int(qtd_str)
+                qtd = int(partes[2])
                 jornadas.append({
                     'tipo': 'meia',
-                    'entrada': entrada,
-                    'saida_final': saida_final,
-                    'quantidade': quantidade
+                    'entrada': partes[0],
+                    'saida_final': partes[1],
+                    'quantidade': qtd
                 })
-            except ValueError:
+            except:
                 continue
     return jornadas
 
-# ===================== FUNÇÃO: COLETAR HORÁRIOS ÚNICOS =====================
-def coletar_horarios(jornada_conferentes, jornada_auxiliares):
-    horarios = {'00:00', '23:59'}
-    for jornada in [jornada_conferentes, jornada_auxiliares]:
-        for linha in jornada.strip().split('\n'):
-            linha = linha.strip()
-            if not linha:
-                continue
-            partes = linha.split()
+def coletar_horarios(jc, ja):
+    horarios = set(['00:00', '23:59'])
+    for texto in [jc, ja]:
+        for linha in texto.strip().split('\n'):
+            partes = linha.strip().split()
             if len(partes) in (3, 5):
                 horarios.update(partes[:-1])
-    def hora_para_minutos(h):
-        try:
-            h, m = map(int, h.split(':'))
-            return h * 60 + m
-        except:
-            return 0
-    return sorted(horarios, key=hora_para_minutos)
+    return sorted(horarios, key=lambda x: int(x.split(':')[0])*60 + int(x.split(':')[1]))
 
-# ===================== FUNÇÃO: CONVERTER HORA EM MINUTOS =====================
-def hora_para_minutos(hora):
+def hora_para_minutos(h):
     try:
-        h, m = map(int, hora.split(':'))
+        h, m = map(int, h.split(':'))
         return h * 60 + m
     except:
         return 0
 
-# ===================== FUNÇÃO: PROCESSAR DADOS =====================
-def processar_dados(jornada_conferentes, jornada_auxiliares):
-    horarios_lista = coletar_horarios(jornada_conferentes, jornada_auxiliares)
-    timeline_minutos = [hora_para_minutos(h) for h in horarios_lista]
-    disponibilidade_conferentes = [0] * len(timeline_minutos)
-    disponibilidade_auxiliares = [0] * len(timeline_minutos)
-    for j in ler_jornadas(jornada_conferentes):
-        if j['tipo'] == 'completa':
-            entrada = hora_para_minutos(j['entrada'])
-            saida_intervalo = hora_para_minutos(j['saida_intervalo'])
-            retorno_intervalo = hora_para_minutos(j['retorno_intervalo'])
-            saida_final = hora_para_minutos(j['saida_final'])
-            for i, t in enumerate(timeline_minutos):
-                if (entrada <= t < saida_intervalo) or (retorno_intervalo <= t <= saida_final):
-                    disponibilidade_conferentes[i] += j['quantidade']
-        else:
-            entrada = hora_para_minutos(j['entrada'])
-            saida_final = hora_para_minutos(j['saida_final'])
-            for i, t in enumerate(timeline_minutos):
-                if entrada <= t <= saida_final:
-                    disponibilidade_conferentes[i] += j['quantidade']
-    for j in ler_jornadas(jornada_auxiliares):
-        if j['tipo'] == 'completa':
-            entrada = hora_para_minutos(j['entrada'])
-            saida_intervalo = hora_para_minutos(j['saida_intervalo'])
-            retorno_intervalo = hora_para_minutos(j['retorno_intervalo'])
-            saida_final = hora_para_minutos(j['saida_final'])
-            for i, t in enumerate(timeline_minutos):
-                if (entrada <= t < saida_intervalo) or (retorno_intervalo <= t <= saida_final):
-                    disponibilidade_auxiliares[i] += j['quantidade']
-        else:
-            entrada = hora_para_minutos(j['entrada'])
-            saida_final = hora_para_minutos(j['saida_final'])
-            for i, t in enumerate(timeline_minutos):
-                if entrada <= t <= saida_final:
-                    disponibilidade_auxiliares[i] += j['quantidade']
-    df = pd.DataFrame({
-        'Horário': horarios_lista,
-        'Conferentes': disponibilidade_conferentes,
-        'Auxiliares': disponibilidade_auxiliares
-    })
-    return df
+def processar_dados(jc, ja):
+    horarios = coletar_horarios(jc, ja)
+    timeline = [hora_para_minutos(h) for h in horarios]
+    conf = [0] * len(timeline)
+    aux = [0] * len(timeline)
 
-# --- Processamento ---
+    for j in ler_jornadas(jc):
+        e = hora_para_minutos(j['entrada'])
+        sf = hora_para_minutos(j['saida_final'])
+        if j['tipo'] == 'completa':
+            si = hora_para_minutos(j['saida_intervalo'])
+            ri = hora_para_minutos(j['retorno_intervalo'])
+            for i, t in enumerate(timeline):
+                if (e <= t < si) or (ri <= t <= sf):
+                    conf[i] += j['quantidade']
+        else:
+            for i, t in enumerate(timeline):
+                if e <= t <= sf:
+                    conf[i] += j['quantidade']
+
+    for j in ler_jornadas(ja):
+        e = hora_para_minutos(j['entrada'])
+        sf = hora_para_minutos(j['saida_final'])
+        if j['tipo'] == 'completa':
+            si = hora_para_minutos(j['saida_intervalo'])
+            ri = hora_para_minutos(j['retorno_intervalo'])
+            for i, t in enumerate(timeline):
+                if (e <= t < si) or (ri <= t <= sf):
+                    aux[i] += j['quantidade']
+        else:
+            for i, t in enumerate(timeline):
+                if e <= t <= sf:
+                    aux[i] += j['quantidade']
+
+    return pd.DataFrame({
+        'Horário': horarios,
+        'Conferentes': conf,
+        'Auxiliares': aux
+    })
+
+# --- Processa ---
 df = processar_dados(jornada_conferentes, jornada_auxiliares)
 
 # --- Controles ---
@@ -171,7 +155,7 @@ with col1:
 with col2:
     st.markdown("**Clique no gráfico para maximizar**")
 
-# --- Download Excel (usando openpyxl) ---
+# --- Download Excel ---
 output = io.BytesIO()
 with pd.ExcelWriter(output, engine='openpyxl') as writer:
     df.to_excel(writer, index=False, sheet_name='Disponibilidade')
@@ -183,7 +167,7 @@ st.download_button(
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
 
-# --- Gráfico Plotly ---
+# --- Gráfico ---
 fig = make_subplots()
 fig.add_trace(go.Scatter(
     x=df['Horário'], y=df['Conferentes'],
@@ -203,22 +187,31 @@ fig.add_trace(go.Scatter(
     fill='tozeroy',
     fillcolor='rgba(34, 139, 34, 0.3)'
 ))
+
 # Intervalo
 if '09:30' in df['Horário'].values and '10:30' in df['Horário'].values:
     fig.add_vrect(x0='09:30', x1='10:30', fillcolor="gray", opacity=0.1, line_width=0)
+
 # Rótulos
 if mostrar_rotulos:
     for _, row in df.iterrows():
         if row['Conferentes'] > 0:
-            fig.add_annotation(x=row['Horário'], y=row['Conferentes'] + 0.8,
-                               text=str(int(row['Conferentes'])),
-                               showarrow=False, font=dict(color='#90EE90', size=10, family="bold"),
-                               bgcolor="white", bordercolor='#90EE90', borderwidth=1, borderpad=4)
+            fig.add_annotation(
+                x=row['Horário'], y=row['Conferentes'] + 0.8,
+                text=str(int(row['Conferentes'])),
+                showarrow=False,
+                font=dict(color='#90EE90', size=10, family="bold"),
+                bgcolor="white", bordercolor='#90EE90', borderwidth=1, borderpad=4
+            )
         if row['Auxiliares'] > 0:
-            fig.add_annotation(x=row['Horário'], y=row['Auxiliares'] + 0.8,
-                               text=str(int(row['Auxiliares'])),
-                               showarrow=False, font=dict(color='#228B22', size=10, family="bold"),
-                               bgcolor="white", bordercolor='#228B22', borderwidth=1, borderpad=4)
+            fig.add_annotation(
+                x=row['Horário'], y=row['Auxiliares'] + 0.8,
+                text=str(int(row['Auxiliares'])),
+                showarrow=False,
+                font=dict(color='#228B22', size=10, family="bold"),
+                bgcolor="white", bordercolor='#228B22', borderwidth=1, borderpad=4
+            )
+
 fig.update_layout(
     title="Disponibilidade de Equipe (00:00 - 23:59)",
     xaxis_title="Horário",
@@ -228,6 +221,7 @@ fig.update_layout(
     height=600,
     margin=dict(t=80, b=50, l=50, r=50)
 )
+
 st.plotly_chart(fig, use_container_width=True)
 
 # --- Instruções ---
@@ -236,5 +230,5 @@ st.markdown("""
 - Faça upload dos arquivos (Excel/CSV/TXT) com jornadas.
 - Marque/desmarque **Rótulos** para mostrar/ocultar valores.
 - Clique no ícone ⤢ (canto superior direito do gráfico) para **maximizar**.
-- Clique em **📥 Baixar Excel** para exportar os dados em colunas.
+- Clique em **📥 Baixar Excel** para exportar os dados.
 """)
