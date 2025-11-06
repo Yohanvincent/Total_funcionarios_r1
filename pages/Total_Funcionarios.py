@@ -173,9 +173,7 @@ df = pd.DataFrame({"Horario": horarios, "Total": total})
 # =============================================
 c1, c2, _ = st.columns([1, 1, 6])
 with c1:
-    rotulos = st.checkbox("Rótulos", True)           # Liga/desliga rótulos
-with c2:
-    
+    rotulos = st.checkbox("Rótulos", True)           # Liga/desliga rótulos  
 
 # Exporta para Excel
 output = io.BytesIO()
