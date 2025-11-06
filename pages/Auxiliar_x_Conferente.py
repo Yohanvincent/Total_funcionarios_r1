@@ -1,4 +1,4 @@
-# pages/1_Conferentes_vs_Auxiliares.py (CORRIGIDO + EXPLICAÇÃO)
+# pages/1_Conferentes_vs_Auxiliares.py (FUNCIONA 100% - TESTADO)
 
 import streamlit as st
 import pandas as pd
@@ -8,7 +8,7 @@ import io
 st.set_page_config(layout="wide")
 
 st.title("Disponibilidade: Conferentes vs Auxiliares")
-st.markdown("**Upload (Excel/CSV/TXT) ou use padrão.**")
+st.markdown("**Upload (Excel/CSV/TXT) ou use padrao.**")
 
 c1, c2 = st.columns(2)
 with c1:
@@ -16,33 +16,15 @@ with c1:
 with c2:
     up_aux = st.file_uploader("Auxiliares", ["txt", "csv", "xlsx"], key="a")
 
-padrao_conf = """00:00 04:00 05:15 09:33 9
-04:00 09:00 10:15 13:07 27
-04:30 08:30 10:30 15:14 1
-06:00 11:00 12:15 16:03 1
-07:45 12:00 13:15 17:48 1
-08:00 12:00 13:15 18:03 2
-10:00 12:00 14:00 20:48 11
-12:00 16:00 17:15 22:02 8
-13:00 16:00 17:15 22:55 5
-15:45 18:00 18:15 22:00 7
-16:30 19:30 19:45 22:39 2"""
+padrao_conf = "00:00 04:00 05:15 09:33 9\n04:00 09:00 10:15 13:07 27\n04:30 08:30 10:30 15:14 1\n06:00 11:00 12:15 16:03 1\n07:45 12:00 13:15 17:48 1\n08:00 12:00 13:15 18:03 2\n10:00 12:00 14:00 20:48 11\n12:00 16:00 17:15 22:02 8\n13:00 16:00 17:15 22:55 5\n15:45 18:00 18:15 22:00 7\n16:30 19:30 19:45 22:39 2"
 
-padrao_aux = """00:00 04:00 05:15 09:33 10
-04:00 09:00 10:15 13:07 17
-12:00 16:00 17:15 22:02 2
-13:00 16:00 17:15 22:55 3
-15:45 18:00 18:15 22:00 3
-16:30 19:30 19:45 22:39 2
-17:48 21:48 1
-18:00 22:00 19
-19:00 22:52 5"""
+padrao_aux = "00:00 04:00 05:15 09:33 10\n04:00 09:00 10:15 13:07 17\n12:00 16:00 17:15 22:02 2\n13:00 16:00 17:15 22:55 3\n15:45 18:00 18:15 22:00 3\n16:30 19:30 19:45 22:39 2\n17:48 21:48 1\n18:00 22:00 19\n19:00 22:52 5"
 
 def ler(f):
     if f:
         if f.name.endswith(".xlsx"):
             df = pd.read_excel(f, header=None)
-            return "\n".join(df.astype(str).apply(" ".join, axis=1))
+            return "\n".join(" ".join(row.astype(str)) for row in df.values)
         else:
             return f.getvalue().decode("utf-8")
     return None
@@ -68,7 +50,7 @@ def hor(h):
         return 0
 
 def horarios(jc, ja):
-    h = set(["00:00", "23:59"])
+    h = {"00:00", "23:59"}
     for texto in [jc, ja]:
         for linha in texto.strip().split("\n"):
             partes = linha.strip().split()
@@ -189,21 +171,21 @@ fig.update_layout(
 
 st.plotly_chart(fig, use_container_width=True)
 
-# === EXPLICAÇÃO DE UPLOAD ===
-with st.expander("Como preparar os arquivos para upload (Conferentes e Auxiliares)", expanded=False):
+# === EXPLICACAO DE UPLOAD ===
+with st.expander("Como preparar os arquivos para upload (Conferentes e Auxiliares)"):
     st.markdown("""
-### Formato das linhas (separadas por espaço):
+### Formato das linhas (separadas por espaco):
 
 | Tipo de Jornada | Formato | Exemplo |
 |----------------|--------|--------|
-| **Jornada Completa** (com intervalo) | `entrada saída_intervalo retorno_intervalo saída_final quantidade` | `04:00 09:00 10:15 13:07 27` |
-| **Jornada Meia** (sem intervalo) | `entrada saída_final quantidade` | `17:48 21:48 1` |
+| **Jornada Completa** (com intervalo) | `entrada saida_intervalo retorno_intervalo saida_final quantidade` | `04:00 09:00 10:15 13:07 27` |
+| **Jornada Meia** (sem intervalo) | `entrada saida_final quantidade` | `17:48 21:48 1` |
 
 ### Regras:
-- **Horários no formato `HH:MM`** (24h)
+- **Horarios no formato `HH:MM`** (24h)
 - **Uma linha por grupo de colaboradores com a mesma jornada**
-- **Quantidade no final** (número inteiro)
-- **Separado por espaços** (não use vírgula ou ponto e vírgula)
-- **Sem cabeçalho** (não coloque títulos como "Entrada", "Saída", etc.)
+- **Quantidade no final** (numero inteiro)
+- **Separado por espacos** (nao use virgula ou ponto e virgula)
+- **Sem cabecalho** (nao coloque titulos como "Entrada", "Saida", etc.)
 
 ### Exemplo de arquivo TXT/CSV:
