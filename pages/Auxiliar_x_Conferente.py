@@ -1,4 +1,4 @@
-# pages/1_Conferentes_vs_Auxiliares.py (CACHE + COMENTÁRIOS + ZERO ERROS)
+# pages/1_Conferentes_vs_Auxiliares.py (CACHE PERSISTENTE ENTRE ABAS + DOCUMENTAÇÃO)
 
 import streamlit as st
 import pandas as pd
@@ -8,35 +8,50 @@ import io
 # =============================================
 # CONFIGURAÇÃO DA PÁGINA
 # =============================================
-st.set_page_config(layout="wide")  # Layout largo para melhor visualização
+st.set_page_config(layout="wide")
 
 st.title("Disponibilidade: Conferentes vs Auxiliares")
 st.markdown("**Upload (Excel/CSV/TXT) ou use padrão.**")
 
 # =============================================
-# CACHE DE UPLOAD: NÃO PERDE DADOS AO TROCAR DE ABA
+# CACHE GLOBAL COM st.session_state
 # =============================================
-# @st.cache_data mantém o arquivo carregado em memória
-# Mesmo ao navegar entre páginas, o upload persiste
-@st.cache_data(show_spinner=False)
-def carregar_arquivo(uploaded_file):
-    """Lê e retorna o conteúdo do arquivo como string com quebras de linha."""
-    if uploaded_file is None:
-        return None
-    if uploaded_file.name.endswith(".xlsx"):
-        df = pd.read_excel(uploaded_file, header=None)
-        return "\n".join(" ".join(map(str, row)) for row in df.values)
-    else:
-        return uploaded_file.getvalue().decode("utf-8", errors="ignore")
+# Problema anterior: @st.cache_data não persiste entre páginas diferentes
+# Solução: Usar st.session_state com chave única por página
+# Isso mantém o upload mesmo ao trocar de aba e voltar
 
-# Uploaders com chaves únicas
+if "conf_data" not in st.session_state:
+    st.session_state.conf_data = None
+if "aux_data" not in st.session_state:
+    st.session_state.aux_data = None
+
+# =============================================
+# UPLOADERS COM PERSISTÊNCIA
+# =============================================
 c1, c2 = st.columns(2)
 with c1:
-    up_conf = st.file_uploader("Conferentes", ["txt", "csv", "xlsx"], key="conf_upload")
-with c2:
-    up_aux = st.file_uploader("Auxiliares", ["txt", "csv", "xlsx"], key="aux_upload")
+    up_conf = st.file_uploader(
+        "Conferentes",
+        ["txt", "csv", "xlsx"],
+        key="conf_uploader",  # Chave única evita recarregar
+        help="Faça upload e troque de aba: os dados permanecem!"
+    )
+    if up_conf is not None:
+        st.session_state.conf_data = up_conf.getvalue()
 
-# Dados padrão (usados se não houver upload)
+with c2:
+    up_aux = st.file_uploader(
+        "Auxiliares",
+        ["txt", "csv", "xlsx"],
+        key="aux_uploader",
+        help="Upload persiste entre abas"
+    )
+    if up_aux is not None:
+        st.session_state.aux_data = up_aux.getvalue()
+
+# =============================================
+# DADOS PADRÃO
+# =============================================
 padrao_conf = (
     "00:00 04:00 05:15 09:33 9\n04:00 09:00 10:15 13:07 27\n04:30 08:30 10:30 15:14 1\n"
     "06:00 11:00 12:15 16:03 1\n07:45 12:00 13:15 17:48 1\n08:00 12:00 13:15 18:03 2\n"
@@ -50,15 +65,32 @@ padrao_aux = (
     "17:48 21:48 1\n18:00 22:00 19\n19:00 22:52 5"
 )
 
-# Carrega com cache
-jc = carregar_arquivo(up_conf) or padrao_conf
-ja = carregar_arquivo(up_aux) or padrao_aux
+# =============================================
+# FUNÇÃO DE LEITURA (REUTILIZÁVEL)
+# =============================================
+def ler_arquivo_bytes(bytes_data):
+    """Converte bytes em string com quebras de linha."""
+    if bytes_data is None:
+        return None
+    try:
+        return bytes_data.decode("utf-8")
+    except:
+        # Fallback para Excel: tenta ler como binário
+        df = pd.read_excel(io.BytesIO(bytes_data), header=None)
+        return "\n".join(" ".join(map(str, row)) for row in df.values)
+
+# Carrega dados do session_state ou padrão
+jc_raw = st.session_state.conf_data or padrao_conf.encode()
+ja_raw = st.session_state.aux_data or padrao_aux.encode()
+
+jc = ler_arquivo_bytes(jc_raw)
+ja = ler_arquivo_bytes(ja_raw)
 
 # =============================================
-# FUNÇÕES DE PROCESSAMENTO
+# PROCESSAMENTO DE JORNADAS
 # =============================================
 def extrair_jornadas(texto):
-    """Extrai jornadas do texto: completa (5 partes) ou meia (3 partes)."""
+    """Extrai jornadas do texto."""
     jornadas = []
     for linha in texto.strip().split("\n"):
         p = linha.strip().split()
@@ -69,7 +101,6 @@ def extrair_jornadas(texto):
     return jornadas
 
 def minutos(h):
-    """Converte 'HH:MM' → minutos do dia."""
     try:
         h, m = map(int, h.split(":"))
         return h * 60 + m
@@ -77,7 +108,6 @@ def minutos(h):
         return 0
 
 def coletar_horarios(jc, ja):
-    """Coleta e ordena todos os horários únicos."""
     h = {"00:00", "23:59"}
     for t in [jc, ja]:
         for l in t.strip().split("\n"):
@@ -87,15 +117,14 @@ def coletar_horarios(jc, ja):
     return sorted(h, key=minutos)
 
 # =============================================
-# CÁLCULO DE DISPONIBILIDADE
+# CÁLCULO
 # =============================================
 horarios = coletar_horarios(jc, ja)
 timeline = [minutos(h) for h in horarios]
-conf_count = [0] * len(timeline)
-aux_count = [0] * len(timeline)
+conf = [0] * len(timeline)
+aux = [0] * len(timeline)
 
 def aplicar_jornada(j, lista, tl):
-    """Aplica jornada na timeline."""
     e = minutos(j["e"])
     sf = minutos(j["sf"])
     if j["tipo"] == "c":
@@ -110,28 +139,29 @@ def aplicar_jornada(j, lista, tl):
                 lista[i] += j["q"]
 
 for j in extrair_jornadas(jc):
-    aplicar_jornada(j, conf_count, timeline)
+    aplicar_jornada(j, conf, timeline)
 for j in extrair_jornadas(ja):
-    aplicar_jornada(j, aux_count, timeline)
+    aplicar_jornada(j, aux, timeline)
 
-df = pd.DataFrame({"Horario": horarios, "Conferentes": conf_count, "Auxiliares": aux_count})
+df = pd.DataFrame({"Horario": horarios, "Conferentes": conf, "Auxiliares": aux})
 
 # =============================================
-# CONTROLES E DOWNLOAD
+# CONTROLES
 # =============================================
 c1, c2, _ = st.columns([1, 1, 6])
 with c1:
     rotulos = st.checkbox("Rótulos", True)
 with c2:
-    st.markdown("**Clique no gráfico para maximizar**")
+    st.markdown("**Upload persiste ao trocar de aba!**")
 
+# Download
 output = io.BytesIO()
 with pd.ExcelWriter(output, engine="openpyxl") as writer:
     df.to_excel(writer, index=False)
 output.seek(0)
 
 st.download_button(
-    "Baixar Excel",
+    "📥 Baixar Excel",
     output,
     "equipe.xlsx",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -191,24 +221,17 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 # =============================================
-# EXPLICAÇÃO DE UPLOAD
+# EXPLICAÇÃO
 # =============================================
-with st.expander("Como preparar os arquivos para upload"):
+with st.expander("📋 Como preparar os arquivos"):
     st.markdown(
-        "### Formato das linhas:\n\n"
-        "| Tipo | Formato | Exemplo |\n"
-        "|------|--------|--------|\n"
-        "| Completa | `entrada saída_int retorno saída_final qtd` | `04:00 09:00 10:15 13:07 27` |\n"
-        "| Meia | `entrada saída_final qtd` | `17:48 21:48 1` |\n\n"
-        "### Regras:\n"
-        "- `HH:MM` (24h)\n"
-        "- Uma linha = um grupo\n"
-        "- Quantidade = inteiro\n"
-        "- Separado por espaços\n"
-        "- Sem cabeçalho\n\n"
-        "### Exemplo TXT:\n"
-        "```\n00:00 04:00 05:15 09:33 9\n04:00 09:00 10:15 13:07 27\n```\n\n"
-        "> Copie do Excel → Bloco de Notas → Salve como `.txt`"
+        "### Formato:\n\n"
+        "| Tipo | Exemplo |\n"
+        "|------|--------|\n"
+        "| Completa | `04:00 09:00 10:15 13:07 27` |\n"
+        "| Meia | `17:48 21:48 1` |\n\n"
+        "- `HH:MM` | Uma linha = um grupo | Sem cabeçalho\n"
+        "- Copie do Excel → Bloco de Notas → `.txt`"
     )
 
-st.markdown("**Upload → Rótulos → Maximizar → Baixar**")
+st.success("✅ **Upload agora persiste entre abas!**")
