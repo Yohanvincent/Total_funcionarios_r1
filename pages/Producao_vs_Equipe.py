@@ -109,14 +109,7 @@ max_eq = max(eq) if eq else 0
 margem = 5
 y_min = -max_said - margem
 y_max = max_cheg + margem
-
-# Calcula proporção para alinhar zeros
-total_range = y_max - y_min
-eq_range = max_eq + margem
-scale_factor = total_range / eq_range if eq_range > 0 else 1
-
-# Escala equipe para caber no eixo esquerdo (alinhado ao zero)
-df["Equipe_Escalada"] = df["Equipe"] * scale_factor + y_min
+y2_max = max_eq + margem
 
 fig = go.Figure()
 
@@ -131,11 +124,11 @@ fig.add_trace(go.Bar(
 ))
 
 fig.add_trace(go.Scatter(
-    x=df["Horario"], y=df["Equipe_Escalada"],
+    x=df["Horario"], y=df["Equipe"],
     mode="lines+markers", name="Equipe",
     line=dict(color="#9B59B6", width=4),
-    marker=dict(size=8, color="#9B59B6"),
-    yaxis="y"
+    marker=dict(size=8),
+    yaxis="y2"
 ))
 
 if rotulos:
@@ -158,7 +151,7 @@ if rotulos:
             )
         if r["Equipe"] > 0:
             fig.add_annotation(
-                x=r["Horario"], y=r["Equipe_Escalada"],
+                x=r["Horario"], y=r["Equipe"],
                 text=f"{int(r['Equipe'])}",
                 font=dict(color="#9B59B6", size=9),
                 bgcolor="white", bordercolor="#9B59B6", borderwidth=1,
@@ -168,10 +161,18 @@ if rotulos:
 fig.update_layout(
     xaxis_title="Horario",
     yaxis=dict(
-        title="Toneladas (Chegada + / Saida -) | Equipe (escalada)",
+        title="Toneladas (Chegada + / Saida -)",
         side="left",
         range=[y_min, y_max],
         zeroline=True, zerolinewidth=2, zerolinecolor="black"
+    ),
+    yaxis2=dict(
+        title="Equipe",
+        side="right",
+        overlaying="y",
+        range=[0, y2_max],
+        position=1.0,  # Alinha visualmente com o zero
+        showgrid=False
     ),
     height=650,
     hovermode="x unified",
