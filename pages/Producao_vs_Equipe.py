@@ -150,12 +150,16 @@ if rotulos:
                 showarrow=False, yshift=-10
             )
         if r["Equipe"] > 0:
+            # Rótulo centralizado verticalmente na bolinha
             fig.add_annotation(
                 x=r["Horario"], y=r["Equipe"],
                 text=f"{int(r['Equipe'])}",
                 font=dict(color="#9B59B6", size=9),
                 bgcolor="white", bordercolor="#9B59B6", borderwidth=1,
-                showarrow=False, yshift=5  # Super colado na bolinha
+                showarrow=False,
+                yshift=0,  # Zero deslocamento vertical
+                align="center",
+                valign="middle"
             )
 
 fig.update_layout(
