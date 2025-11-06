@@ -1,11 +1,10 @@
-# pages/3_Producao_vs_Equipe.py
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import io
 
 st.set_page_config(layout="wide")
-st.title("Producao vs. Equipe Disponivel")
+st.title("Producao vs Equipe Disponivel")
 
 rotulos = st.checkbox("Rotulos", True)
 
@@ -14,128 +13,87 @@ if "prod_bytes" not in st.session_state:
 if "prod_name" not in st.session_state:
     st.session_state.prod_name = None
 
-padrao_producao = (
-    "Cheg. Ton.\n"
-    "01:00 7,278041\n02:30 6,936955\n03:30 0\n04:00 3,542897\n04:30 1,676141\n"
-    "05:15 14,263712\n05:30 4,482417\n05:50 3,695104\n06:00 4,389653\n06:00 3,4539\n"
-    "06:00 2,153276\n06:00 2,852677\n06:30 2,720908\n07:15 6,567569\n07:30 1,44941\n"
-    "09:30 12,076731\n10:15 0,1992\n11:00 1,462557\n12:45 0\n18:00 6,98727\n"
-    "21:30 2,837159\n23:30 7,998834\n"
-    "Saida Ton.\n"
-    "03:15 5,618428\n04:45 0\n20:15 8,43512\n21:00 0,909347\n21:00 6,061068\n"
-    "21:00 3,913779\n21:00 4,649687\n21:00 2,756661\n21:00 2,461966\n21:00 1,787873\n"
-    "21:00 4,040584\n21:00 2,996577\n21:00 4,22898\n21:10 5,479109\n21:20 9,849377\n"
-    "21:30 5,961456\n21:30 8,997052\n22:00 0,351623\n22:00 0,366688\n22:00 7,782288\n"
-    "22:15 5,598385\n23:45 18,571689"
-)
+padrao_producao = "Cheg. Ton.\n01:00 7,278041\n02:30 6,936955\n03:30 0\n04:00 3,542897\n04:30 1,676141\n05:15 14,263712\n05:30 4,482417\n05:50 3,695104\n06:00 4,389653\n06:00 3,4539\n06:00 2,153276\n06:00 2,852677\n06:30 2,720908\n07:15 6,567569\n07:30 1,44941\n09:30 12,076731\n10:15 0,1992\n11:00 1,462557\n12:45 0\n18:00 6,98727\n21:30 2,837159\n23:30 7,998834\nSaida Ton.\n03:15 5,618428\n04:45 0\n20:15 8,43512\n21:00 0,909347\n21:00 6,061068\n21:00 3,913779\n21:00 4,649687\n21:00 2,756661\n21:00 2,461966\n21:00 1,787873\n21:00 4,040584\n21:00 2,996577\n21:00 4,22898\n21:10 5,479109\n21:20 9,849377\n21:30 5,961456\n21:30 8,997052\n22:00 0,351623\n22:00 0,366688\n22:00 7,782288\n22:15 5,598385\n23:45 18,571689"
 
-def ler_producao(bytes_data, fallback):
-    if bytes_data is None:
-        return fallback
-    try:
-        return bytes_data.decode("utf-8")
-    except:
-        df = pd.read_excel(io.BytesIO(bytes_data), header=None)
-        return "\n".join(" ".join(map(str, row)) for row in df.values)
+def ler_producao(b, f):
+    if b is None: return f
+    try: return b.decode("utf-8")
+    except: 
+        df = pd.read_excel(io.BytesIO(b), header=None)
+        return "\n".join(" ".join(map(str, r)) for r in df.values)
 
-producao_texto = ler_producao(st.session_state.prod_bytes, padrao_producao)
+texto = ler_producao(st.session_state.prod_bytes, padrao_producao)
 
-def extrair_producao(texto):
-    chegadas = {}
-    saidas = {}
-    modo = None
-    for linha in texto.strip().split("\n"):
-        linha = linha.strip()
-        if linha == "Cheg. Ton.":
-            modo = "chegada"
-            continue
-        elif linha == "Saida Ton.":
-            modo = "saida"
-            continue
-        if not linha or modo is None:
-            continue
-        partes = linha.split()
-        if len(partes) >= 2:
-            hora = partes[0]
-            try:
-                valor = float(partes[1].replace(",", "."))
-                if modo == "chegada":
-                    chegadas[hora] = chegadas.get(hora, 0) + valor
-                else:
-                    saidas[hora] = saidas.get(hora, 0) + valor
-            except:
-                continue
-    return chegadas, saidas
+def extrair(texto):
+    c, s, m = {}, {}, None
+    for l in texto.strip().split("\n"):
+        l = l.strip()
+        if l == "Cheg. Ton.": m = "c"; continue
+        if l == "Saida Ton.": m = "s"; continue
+        if not l or not m: continue
+        p = l.split()
+        if len(p) < 2: continue
+        h = p[0]
+        try:
+            v = float(p[1].replace(",", "."))
+            if m == "c": c[h] = c.get(h, 0) + v
+            else: s[h] = s.get(h, 0) + v
+        except: pass
+    return c, s
 
-chegadas, saidas = extrair_producao(producao_texto)
+cheg, said = extrair(texto)
 
-# DADOS DA EQUIPE (PADRAO)
 padrao_conf = "00:00 04:00 05:15 09:33 9\n04:00 09:00 10:15 13:07 27\n04:30 08:30 10:30 15:14 1\n06:00 11:00 12:15 16:03 1\n07:45 12:00 13:15 17:48 1\n08:00 12:00 13:15 18:03 2\n10:00 12:00 14:00 20:48 11\n12:00 16:00 17:15 22:02 8\n13:00 16:00 17:15 22:55 5\n15:45 18:00 18:15 22:00 7\n16:30 19:30 19:45 22:39 2"
 padrao_aux = "00:00 04:00 05:15 09:33 10\n04:00 09:00 10:15 13:07 17\n12:00 16:00 17:15 22:02 2\n13:00 16:00 17:15 22:55 3\n15:45 18:00 18:15 22:00 3\n16:30 19:30 19:45 22:39 2\n17:48 21:48 1\n18:00 22:00 19\n19:00 22:52 5"
 
-def extrair_jornadas(texto):
-    jornadas = []
-    for linha in texto.strip().split("\n"):
-        p = linha.strip().split()
-        if len(p) == 5 and p[4].isdigit():
-            jornadas.append({"tipo": "c", "e": p[0], "si": p[1], "ri": p[2], "sf": p[3], "q": int(p[4])})
-        elif len(p) == 3 and p[2].isdigit():
-            jornadas.append({"tipo": "m", "e": p[0], "sf": p[1], "q": int(p[2])})
-    return jornadas
+def jornadas(t):
+    j = []
+    for l in t.strip().split("\n"):
+        p = l.strip().split()
+        if len(p)==5 and p[4].isdigit(): j.append({"t":"c","e":p[0],"si":p[1],"ri":p[2],"sf":p[3],"q":int(p[4])})
+        elif len(p)==3 and p[2].isdigit(): j.append({"t":"m","e":p[0],"sf":p[1],"q":int(p[2])})
+    return j
 
-def minutos(h):
-    try:
-        h, m = map(int, h.split(":"))
-        return h * 60 + m
-    except:
-        return 0
+def min(h):
+    try: h,m = map(int, h.split(":")); return h*60 + m
+    except: return 0
 
-def coletar_horarios(jc, ja):
-    h = {"00:00", "23:59"}
-    for t in [jc, ja]:
+def horarios(jc, ja):
+    h = {"00:00","23:59"}
+    for t in [jc,ja]:
         for l in t.strip().split("\n"):
             p = l.strip().split()
-            if len(p) in (3, 5):
-                h.update(p[:-1])
-    return sorted(h, key=minutos)
+            if len(p) in (3,5): h.update(p[:-1])
+    return sorted(h, key=min)
 
-horarios = coletar_horarios(padrao_conf, padrao_aux)
-timeline = [minutos(h) for h in horarios]
-total = [0] * len(timeline)
+hrs = horarios(padrao_conf, padrao_aux)
+tl = [min(h) for h in hrs]
+eq = [0] * len(tl)
 
-def aplicar_jornada(j, lista, tl):
-    e = minutos(j["e"])
-    sf = minutos(j["sf"])
-    if j["tipo"] == "c":
-        si = minutos(j["si"])
-        ri = minutos(j["ri"])
-        for i, t in enumerate(tl):
-            if (e <= t < si) or (ri <= t <= sf):
-                lista[i] += j["q"]
+def aplicar(j, lista, tl):
+    e = min(j["e"])
+    sf = min(j["sf"])
+    if j["t"] == "c":
+        si = min(j["si"])
+        ri = min(j["ri"])
+        for i,t in enumerate(tl):
+            if (e <= t < si) or (ri <= t <= sf): lista[i] += j["q"]
     else:
-        for i, t in enumerate(tl):
-            if e <= t <= sf:
-                lista[i] += j["q"]
+        for i,t in enumerate(tl):
+            if e <= t <= sf: lista[i] += j["q"]
 
-for j in extrair_jornadas(padrao_conf):
-    aplicar_jornada(j, total, timeline)
-for j in extrair_jornadas(padrao_aux):
-    aplicar_jornada(j, total, timeline)
+for j in jornadas(padrao_conf): aplicar(j, eq, tl)
+for j in jornadas(padrao_aux): aplicar(j, eq, tl)
 
-producao_por_hora = {h: 0.0 for h in horarios}
-for hora, ton in chegadas.items():
-    if hora in producao_por_hora:
-        producao_por_hora[hora] += ton
+prod_h = {h:0.0 for h in hrs}
+for h,v in cheg.items():
+    if h in prod_h: prod_h[h] += v
 
-df = pd.DataFrame({
-    "Horario": horarios,
-    "Equipe": total,
-    "Producao_Ton": [producao_por_hora[h] for h in horarios]
-})
+df = pd.DataFrame({"Horario":hrs, "Equipe":eq, "Producao_Ton":[prod_h[h] for h in hrs]})
 
 fig = go.Figure()
-fig.add_trace(go.Bar(x=df["Horario"], y=df["Producao_Ton"], name="Producao (ton)", marker_color="#FF6B6B", opacity=0.7))
-fig.add_trace(go.Scatter(x=df["Horario"], y=df["Equipe"], mode="lines+markers", name="Equipe", line=dict(color="#4ECDC4", width=4), marker=dict(size=6), yaxis="y2"))
+fig.add_trace(go.Bar(x=df["Horario"], y=df["Producao_Ton"], name="Producao", marker_color="#FF6B6B", opacity=0.7))
+fig.add_trace(go.Scatter(x=df["Horario"], y=df["Equipe"], mode="lines+markers", name="Equipe", line=dict(color="#4ECDC4", width=4), yaxis="y2"))
 
 if rotulos:
     for _, r in df.iterrows():
@@ -146,35 +104,31 @@ if rotulos:
 
 fig.update_layout(
     xaxis_title="Horario",
-    yaxis=dict(title="Toneladas", side="left", showgrid=False),
-    yaxis2=dict(title="Equipe", side="right", overlaying="y", showgrid=False),
+    yaxis=dict(title="Toneladas", side="left"),
+    yaxis2=dict(title="Equipe", side="right", overlaying="y"),
     height=600,
     hovermode="x unified",
-    margin=dict(l=40, r=60, t=20, b=40),
-    legend=dict(x=0, y=1.1, orientation="h"),
-    barmode="relative"
+    legend=dict(x=0, y=1.1, orientation="h")
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
-st.markdown("**Upload de Producao (Cheg. + Saida Ton.) ou use padrao.**")
-up_prod = st.file_uploader("Arquivo de Producao (TXT/CSV/XLSX)", ["txt", "csv", "xlsx"], key="prod_uploader")
-if up_prod is not None:
-    st.session_state.prod_bytes = up_prod.getvalue()
-    st.session_state.prod_name = up_prod.name
+st.markdown("**Upload Producao (Cheg. + Saida) ou use padrao.**")
+up = st.file_uploader("TXT/CSV/XLSX", ["txt","csv","xlsx"], key="up")
+if up:
+    st.session_state.prod_bytes = up.getvalue()
+    st.session_state.prod_name = up.name
 if st.session_state.prod_name:
-    st.success(f"Producao: **{st.session_state.prod_name}**")
+    st.success(f"Arquivo: **{st.session_state.prod_name}**")
 
-output = io.BytesIO()
-with pd.ExcelWriter(output, engine="openpyxl") as writer:
-    df.to_excel(writer, index=False)
-output.seek(0)
-st.download_button("Baixar Excel", output, "producao_vs_equipe.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+out = io.BytesIO()
+with pd.ExcelWriter(out, engine="openpyxl") as w: df.to_excel(w, index=False)
+out.seek(0)
+st.download_button("Baixar Excel", out, "producao.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 if st.session_state.prod_name:
-    st.markdown("### Dados de Producao Carregados")
-    st.code(producao_texto, language="text")
+    st.markdown("### Dados Carregados")
+    st.code(texto, language="text")
 
-with st.expander("Como preparar o arquivo de producao"):
-    st.markdown("""
-### Formato esperado:
+with st.expander("Formato do arquivo"):
+    st.markdown("Cheg. Ton.\n01:00 7,278041\n...\nSaida Ton.\n21:00 6,061068\n- HH:MM valor\n- Virgula ou ponto")
