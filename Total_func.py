@@ -1,13 +1,28 @@
-# app.py
+# pages/2_Total_Funcionarios.py
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
+from datetime import datetime
+import io
 
-st.set_page_config(page_title="Dashboard Logístico", layout="wide")
+# ===================== CONFIGURAÇÃO DA PÁGINA (não usar set_page_config aqui) =====================
+st.title("Disponibilidade Total de Funcionários (Conferentes + Auxiliares)")
 
-# ===================== DADOS DE ENTRADA =====================
-jornada_conferentes = """
+st.markdown("**Upload de dados (Excel/CSV/TXT) ou use os dados padrão abaixo.**")
+
+# --- Upload de arquivos ---
+col1, col2 = st.columns(2)
+with col1:
+    uploaded_conf = st.file_uploader(
+        "Jornada Conferentes", type=["txt", "csv", "xlsx"], key="total_conf"
+    )
+with col2:
+    uploaded_aux = st.file_uploader(
+        "Jornada Auxiliares", type=["txt", "csv", "xlsx"], key="total_aux"
+    )
+
+# --- Dados padrão (iguais ao primeiro código) ---
+jornada_conferentes_padrao = """
 00:00 04:00 05:15 09:33 9
 04:00 09:00 10:15 13:07 27
 04:30 08:30 10:30 15:14 1
@@ -20,8 +35,7 @@ jornada_conferentes = """
 15:45 18:00 18:15 22:00 7
 16:30 19:30 19:45 22:39 2
 """
-
-jornada_auxiliares = """
+jornada_auxiliares_padrao = """
 00:00 04:00 05:15 09:33 10
 04:00 09:00 10:15 13:07 17
 12:00 16:00 17:15 22:02 2
@@ -33,7 +47,20 @@ jornada_auxiliares = """
 19:00 22:52 5
 """
 
-# ===================== FUNÇÃO: LER JORNADAS =====================
+# --- Função para ler arquivo (igual ao primeiro código) ---
+def ler_arquivo(uploaded_file):
+    if uploaded_file is not None:
+        if uploaded_file.name.endswith('.xlsx'):
+            df = pd.read_excel(uploaded_file, header=None)
+            return '\n'.join(df.astype(str).apply(' '.join, axis=1))
+        else:
+            return uploaded_file.getvalue().decode("utf-8")
+    return None
+
+jornada_conferentes = ler_arquivo(uploaded_conf) or jornada_conferentes_padrao
+jornada_auxiliares = ler_arquivo(uploaded_aux) or jornada_auxiliares_padrao
+
+# ===================== FUNÇÃO: LER JORNADAS (igual ao primeiro) =====================
 def ler_jornadas(texto):
     jornadas = []
     for linha in texto.strip().split('\n'):
@@ -90,7 +117,6 @@ def hora_para_datetime(hora_str, base_date="2025-01-01"):
 # ===================== PROCESSAMENTO =====================
 horarios_lista = coletar_horarios(jornada_conferentes, jornada_auxiliares)
 timeline = [hora_para_datetime(h) for h in horarios_lista]
-
 total_funcionarios = [0] * len(timeline)
 
 def processar_jornada(j, total_list, timeline_list):
@@ -122,15 +148,27 @@ df = pd.DataFrame({
     'Datetime': timeline
 })
 
+# --- Controles ---
+col1, col2, col3 = st.columns([1, 1, 6])
+with col1:
+    mostrar_rotulos = st.checkbox("Rótulos", value=True, key="rotulos_total")
+with col2:
+    st.markdown("**Clique no gráfico para maximizar**")
+
+# --- Download Excel (usando openpyxl) ---
+output = io.BytesIO()
+with pd.ExcelWriter(output, engine='openpyxl') as writer:
+    df[['Horário', 'Total Funcionários']].to_excel(writer, index=False, sheet_name='Total')
+output.seek(0)
+st.download_button(
+    label="📥 Baixar Excel",
+    data=output,
+    file_name="total_funcionarios.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+
 # ===================== GRÁFICO COM PLOTLY =====================
-st.title("Disponibilidade Total de Funcionários")
-
-# Botão para rótulos
-mostrar_rotulos = st.checkbox("Mostrar rótulos", value=True)
-
 fig = go.Figure()
-
-# Linha principal
 fig.add_trace(go.Scatter(
     x=df['Datetime'],
     y=df['Total Funcionários'],
@@ -146,7 +184,7 @@ fig.add_trace(go.Scatter(
 if '09:30' in df['Horário'].values and '10:30' in df['Horário'].values:
     t1 = df[df['Horário'] == '09:30']['Datetime'].iloc[0]
     t2 = df[df['Horário'] == '10:30']['Datetime'].iloc[0]
-    fig.add_vrect(x0=t1, x1=t2, fillcolor="gray", opacity=0.1, line_width=0, annotation_text="Intervalo")
+    fig.add_vrect(x0=t1, x1=t2, fillcolor="gray", opacity=0.1, line_width=0)
 
 # Rótulos
 if mostrar_rotulos:
@@ -157,7 +195,7 @@ if mostrar_rotulos:
                 y=row['Total Funcionários'] + 1,
                 text=str(int(row['Total Funcionários'])),
                 showarrow=False,
-                font=dict(color='#90EE90', size=10, family="Arial"),
+                font=dict(color='#90EE90', size=10, family="bold"),
                 bgcolor="white",
                 bordercolor='#90EE90',
                 borderwidth=1,
@@ -177,16 +215,17 @@ fig.update_layout(
     hovermode="x unified",
     template="simple_white",
     height=600,
-    legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
+    legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
+    margin=dict(t=80, b=50, l=50, r=50)
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
 # ===================== INSTRUÇÕES =====================
-with st.expander("Como usar"):
-    st.markdown("""
-    - **Zoom**: Arraste no gráfico  
-    - **Rótulos**: Marque/desmarque a caixa acima  
-    - **Hover**: Passe o mouse para ver detalhes  
-    - **Responsivo**: Funciona em celular e desktop
-    """)
+st.markdown("""
+**Como usar:**
+- Faça upload dos arquivos (Excel/CSV/TXT) com jornadas.
+- Marque/desmarque **Rótulos** para mostrar/ocultar valores.
+- Clique no ícone ⤢ (canto superior direito do gráfico) para **maximizar**.
+- Clique em **📥 Baixar Excel** para exportar os dados em colunas.
+""")
