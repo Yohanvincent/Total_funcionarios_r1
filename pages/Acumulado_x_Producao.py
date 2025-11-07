@@ -362,120 +362,141 @@ for j in extrair_jornadas(conf_txt): aplicar_jornada(j, timeline_min)
 for j in extrair_jornadas(aux_txt):   aplicar_jornada(j, timeline_min)
 
 # =============================================
-# MONTAR DATAFRAME FINAL (TUDO EM KG)
+# MONTAR DATAFRAME FINAL (NORMALIZADO 0-100+)
 # =============================================
 FATOR_TON_PARA_KG = 1000
 
-def floor_hour(h):
-    hh = str(min_hora(h) // 60).zfill(2)
-    return f"{hh}:00"
-
-df = pd.DataFrame({
+# Converter tudo para kg primeiro
+df_raw = pd.DataFrame({
     "Horario": horarios,
-    "Chegada_kg": [round(cheg.get(h, 0) * FATOR_TON_PARA_KG, 0) for h in horarios],
-    "Saida_kg": [round(said.get(h, 0) * FATOR_TON_PARA_KG, 0) for h in horarios],
+    "Chegada_kg": [cheg.get(h, 0) * FATOR_TON_PARA_KG for h in horarios],
+    "Saida_kg": [said.get(h, 0) * FATOR_TON_PARA_KG for h in horarios],
     "Funcionarios": func_total,
     "Capacidade_kg": [capacidade_hora.get(floor_hour(h), 0) * FATOR_TON_PARA_KG for h in horarios],
 })
-
-df["Acumulado_kg"] = (df["Chegada_kg"] - df["Saida_kg"]).cumsum()
+df_raw["Producao_kg"] = df_raw["Chegada_kg"] + df_raw["Saida_kg"]
+df_raw["Acumulado_kg"] = (df_raw["Chegada_kg"] - df_raw["Saida_kg"]).cumsum()
 
 # =============================================
-# GRÁFICO ÚNICO (TUDO EM KG + FUNCIONÁRIOS À DIREITA)
+# NORMALIZAÇÃO: ÍNDICE RELATIVO AO MÁXIMO DO DIA
+# =============================================
+max_capacidade = df_raw["Capacidade_kg"].max()
+max_funcionarios = df_raw["Funcionarios"].max()
+max_producao = df_raw["Producao_kg"].max()
+max_acumulado = df_raw["Acumulado_kg"].max()
+
+# Evitar divisão por zero
+max_capacidade = max_capacidade if max_capacidade > 0 else 1
+max_funcionarios = max_funcionarios if max_funcionarios > 0 else 1
+max_producao = max_producao if max_producao > 0 else 1
+max_acumulado = max_acumulado if max_acumulado > 0 else 1
+
+df = pd.DataFrame({
+    "Horario": df_raw["Horario"],
+    "Chegada (%)": (df_raw["Chegada_kg"] / max_capacidade) * 100,
+    "Saida (%)": (df_raw["Saida_kg"] / max_capacidade) * 100,
+    "Producao (%)": (df_raw["Producao_kg"] / max_capacidade) * 100,
+    "Capacidade (%)": (df_raw["Capacidade_kg"] / max_capacidade) * 100,
+    "Funcionarios (%)": (df_raw["Funcionarios"] / max_funcionarios) * 100,
+    "Acumulado (%)": (df_raw["Acumulado_kg"] / max_acumulado) * 100,
+})
+
+# =============================================
+# GRÁFICO ÚNICO: TUDO EM % (MESMA ESCALA)
 # =============================================
 fig = go.Figure()
 
-# 1. Barras: Chegada e Saída (em kg)
+# 1. Barras empilhadas: Chegada + Saída
 fig.add_trace(go.Bar(
-    x=df["Horario"], y=df["Chegada_kg"],
-    name="Chegada (kg)", marker_color="#2ca02c", opacity=0.9
+    x=df["Horario"], y=df["Chegada (%)"],
+    name="Chegada", marker_color="#2ca02c", opacity=0.9
 ))
 fig.add_trace(go.Bar(
-    x=df["Horario"], y=df["Saida_kg"],
-    name="Saída (kg)", marker_color="#d62728", opacity=0.9
+    x=df["Horario"], y=df["Saida (%)"],
+    name="Saída", marker_color="#d62728", opacity=0.9
 ))
 
-# 2. Capacidade (degrau hv em kg)
+# 2. Capacidade (linha em degrau)
 x_step, y_step = [], []
 for i, row in df.iterrows():
     x_step.append(row["Horario"])
-    y_step.append(row["Capacidade_kg"])
+    y_step.append(row["Capacidade (%)"])
     if i < len(df) - 1:
-        next_h = df.iloc[i + 1]["Horario"]
-        x_step.extend([row["Horario"], next_h])
-        y_step.extend([row["Capacidade_kg"], row["Capacidade_kg"]])
+        x_step.extend([row["Horario"], df.iloc[i+1]["Horario"]])
+        y_step.extend([row["Capacidade (%)"], row["Capacidade (%)"]])
 
 fig.add_trace(go.Scatter(
     x=x_step, y=y_step,
-    mode="lines", name="Capacidade (kg/h)",
-    line=dict(color="#9B59B6", width=4),
-    hovertemplate="%{y:,.0f} kg/h"
+    mode="lines", name="Capacidade",
+    line=dict(color="#9B59B6", width=5),
+    hovertemplate="Capacidade: %{y:.1f}%"
 ))
 
-# 3. Acumulado no pátio (área em kg)
+# 3. Funcionários (linha com área)
 fig.add_trace(go.Scatter(
-    x=df["Horario"], y=df["Acumulado_kg"],
-    mode="lines", name="Acumulado no Pátio (kg)",
+    x=df["Horario"], y=df["Funcionarios (%)"],
+    mode="lines", name="Funcionários",
+    fill="tozeroy", fillcolor="rgba(30, 144, 255, 0.3)",
+    line=dict(color="#1f77b4", width=3),
+    hovertemplate="Funcionários: %{y:.1f}%"
+))
+
+# 4. Acumulado (linha com área)
+fig.add_trace(go.Scatter(
+    x=df["Horario"], y=df["Acumulado (%)"],
+    mode="lines", name="Acumulado no Pátio",
     fill="tozeroy", fillcolor="rgba(148, 103, 189, 0.3)",
     line=dict(color="#9467bd", width=3),
-    hovertemplate="%{y:,.0f} kg"
-))
-
-# 4. Funcionários (eixo secundário)
-fig.add_trace(go.Scatter(
-    x=df["Horario"], y=df["Funcionarios"],
-    mode="lines+markers", name="Funcionários",
-    yaxis="y2",
-    line=dict(color="#1f77b4", width=3),
-    marker=dict(size=5),
-    hovertemplate="%{y} pessoas"
+    hovertemplate="Acumulado: %{y:.1f}%"
 ))
 
 # =============================================
-# RÓTULOS (em kg)
+# RÓTULOS (em % arredondado)
 # =============================================
 if rotulos:
     for _, r in df.iterrows():
-        if r["Chegada_kg"] > 0:
+        if r["Chegada (%)"] > 3:  # só mostrar se > 3%
             fig.add_annotation(
-                x=r["Horario"], y=r["Chegada_kg"],
-                text=f"{int(r['Chegada_kg']):,}".replace(",", "."),
-                showarrow=False, font=dict(color="white", size=9),
-                bgcolor="#2ca02c", yshift=10
+                x=r["Horario"], y=r["Chegada (%)"],
+                text=f"{r['Chegada (%)']:.0f}%",
+                font=dict(color="white", size=9), bgcolor="#2ca02c",
+                showarrow=False, yshift=8
             )
-        if r["Saida_kg"] > 0:
+        if r["Saida (%)"] > 3:
             fig.add_annotation(
-                x=r["Horario"], y=r["Saida_kg"],
-                text=f"{int(r['Saida_kg']):,}".replace(",", "."),
-                showarrow=False, font=dict(color="white", size=9),
-                bgcolor="#d62728", yshift=10
+                x=r["Horario"], y=r["Saida (%)"],
+                text=f"{r['Saida (%)']:.0f}%",
+                font=dict(color="white", size=9), bgcolor="#d62728",
+                showarrow=False, yshift=8
             )
 
 # =============================================
-# LAYOUT COM DOIS EIXOS
+# LEGENDA COM VALORES REAIS (máximos do dia)
 # =============================================
-max_kg = max(df["Capacidade_kg"].max(), df["Acumulado_kg"].max(), (df["Chegada_kg"] + df["Saida_kg"]).max()) * 1.15
-max_func = df["Funcionarios"].max() * 1.3
+st.markdown(f"""
+**Referência do Índice (máximo do dia):**
+- **Capacidade**: {max_capacidade:,.0f} kg/h → 100%
+- **Funcionários**: {max_funcionarios:.0f} pessoas → 100%
+- **Produção/hora máx**: {max_producao:,.0f} kg → 100%
+- **Acumulado máx**: {max_acumulado:,.0f} kg → 100%
+""")
 
+# =============================================
+# LAYOUT
+# =============================================
 fig.update_layout(
-    title="Análise Unificada: Produção, Capacidade, Estoque e Equipe (em kg)",
+    title="Análise Unificada: Tudo na Mesma Escala (%)",
     xaxis_title="Horário",
     yaxis=dict(
-        title="Quilogramas (kg)",
-        range=[0, max_kg],
-        tickformat=","
-    ),
-    yaxis2=dict(
-        title="Funcionários",
-        overlaying="y",
-        side="right",
-        range=[0, max_func]
+        title="Índice Relativo (%)",
+        range=[0, 130],
+        tickformat=".0f"
     ),
     barmode="stack",
     hovermode="x unified",
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     height=700,
-    margin=dict(l=70, r=80, t=80, b=60),
+    margin=dict(l=70, r=60, t=100, b=60),
     plot_bgcolor="white"
 )
 
