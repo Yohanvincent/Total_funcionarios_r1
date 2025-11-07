@@ -1,157 +1,123 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
 
-# ============================================================
-
-# CONFIGURAÇÃO DA PÁGINA
-
-# ============================================================
-
+# Configuração da página
 st.set_page_config(layout="wide")
-st.title("Acumulado x Produção")
+st.title("Capacidade x Produção Acumulada")
 
-# ============================================================
+rotulos = st.checkbox("Exibir rótulos", True)
 
-# CAMPO DE AJUSTE (INPUT DO USUÁRIO)
+# Sidebar - Configurações
+st.sidebar.header("Configurações")
+fator_dinamico = st.sidebar.number_input(
+    "Fator Dinâmico (vol/kg)",
+    min_value=0.0,
+    value=16.10,
+    step=0.1,
+    format="%.2f"
+)
+st.write(f"**Fator atual:** {fator_dinamico:.2f}")
 
-# ============================================================
+# Upload opcional
+uploaded_file = st.file_uploader("Carregar arquivo CSV (opcional)", type=["csv"])
 
-fator_kg_vol = st.number_input("Fator kg/vol (padrão 16.10)", value=16.10, step=0.1)
-kg_por_m3 = 300  # 1 m³ = 300 kg
-tempo_descarga_por_pessoa = 30  # segundos
-
-# ============================================================
-
-# DADOS PADRÃO DE PRODUÇÃO
-
-# ============================================================
-
-dados_padrao = {
-"Horario": [
-"00:00","00:30","01:00","01:30","02:00","02:30","03:00","03:30","04:00",
-"04:30","05:00","05:30","06:00","06:30","07:00","07:30","08:00","08:30",
-"09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00",
-"13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30",
-"18:00","18:30","19:00","19:30","20:00","20:30","21:00","21:30","22:00",
-"22:30","23:00","23:30"
-],
-"Producao_ton": [
-7.3,0,0,6.9,0,5.1,0,0,2.4,0,0,3.5,0,0,0,6.2,0,0,8.7,0,0,7.0,0,0,6.3,0,0,
-4.8,0,0,5.9,0,0,8.2,0,0,7.8,0,0,4.6,0,0,2.9,0,0,1.5,0,0,0
-]
-}
-df_prod = pd.DataFrame(dados_padrao)
-df_prod["Hora_dt"] = pd.to_datetime(df_prod["Horario"], format="%H:%M")
-
-# ============================================================
-
-# OBTÉM DADOS DE FUNCIONÁRIOS DO SESSION_STATE
-
-# ============================================================
-
-if "total_conf_bytes" in st.session_state and "total_aux_bytes" in st.session_state:
-try:
-df_func = pd.read_excel(st.session_state.get("total_func_df", None))
-except Exception:
-df_func = None
+if uploaded_file is not None:
+    df = pd.read_csv(uploaded_file, sep=";", decimal=",")
+    df["Hora"] = pd.to_datetime(df["Hora"], format="%H:%M").dt.strftime("%H:%M")
 else:
-df_func = None
+    # Dados base (sem upload)
+    dados_capacidade = {
+        "Hora": [
+            "00:00","01:00","02:00","03:00","04:00","05:00","06:00","07:00",
+            "08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00",
+            "16:00","17:00","18:00","19:00","20:00","21:00","22:00","23:00"
+        ],
+        "Capacidade_kg": [
+            552.1408578,552.1408578,552.1408578,552.1408578,953.1694808,953.1694808,
+            1456.87693,1456.87693,1408.443521,552.1408578,48.43340858,904.7360722,
+            1005.477562,1156.589797,300.2871332,300.2871332,199.5456433,300.2871332,
+            1844.344199,1995.456433,2247.310158,2247.310158,1833.688849,121.0835214
+        ],
+        "Produção (t)": [
+            7, 6, 8, 5, 9, 10, 12, 15, 16, 13, 9, 10, 11, 12, 13, 15,
+            14, 13, 17, 18, 19, 18, 16, 14
+        ]
+    }
+    df = pd.DataFrame(dados_capacidade)
 
-# Caso não tenha, usa padrão fixo
+# Conversão para toneladas
+df["Capacidade (t)"] = (df["Capacidade_kg"] * fator_dinamico) / 1000
+df["Capacidade (t)"] = df["Capacidade (t)"].round(1)
 
-if df_func is None or "Total" not in df_func.columns:
-horas_func = [f"{h:02d}:{m:02d}" for h in range(0, 24) for m in [0, 30]]
-total_func = [10,10,12,15,18,20,25,27,28,26,22,20,19,18,18,20,22,24,25,25,22,18,15,12,10,8,8,6,5,5,4,4,4,4,3,3,3,2,2,2,1,1,1,1,1,1,1,1]
-df_func = pd.DataFrame({"Horario": horas_func[:len(total_func)], "Total": total_func})
-df_func["Hora_dt"] = pd.to_datetime(df_func["Horario"], format="%H:%M")
+# Interpolação da capacidade — mantém valor constante até o próximo horário
+df_capacidade = pd.DataFrame({
+    "Hora": pd.date_range("00:00", "23:59", freq="15min").strftime("%H:%M")
+})
+df_capacidade = pd.merge_asof(
+    df_capacidade.sort_values("Hora").assign(Hora=pd.to_datetime(df_capacidade["Hora"], format="%H:%M")),
+    df.assign(Hora=pd.to_datetime(df["Hora"], format="%H:%M")).sort_values("Hora")[["Hora", "Capacidade (t)"]],
+    on="Hora",
+    direction="backward"
+)
+df_capacidade["Hora"] = df_capacidade["Hora"].dt.strftime("%H:%M")
 
-# ============================================================
-
-# UNIFICAÇÃO DE EIXO DE TEMPO (PRODUÇÃO + FUNCIONÁRIOS)
-
-# ============================================================
-
-horas_unificadas = pd.date_range("00:00", "23:30", freq="30min").time
-df_base = pd.DataFrame({"Hora_dt": [datetime.combine(datetime.today(), h) for h in horas_unificadas]})
-df_base = df_base.merge(df_prod[["Hora_dt","Producao_ton"]], on="Hora_dt", how="left").fillna(0)
-df_base = df_base.merge(df_func[["Hora_dt","Total"]], on="Hora_dt", how="left").fillna(method="ffill").fillna(0)
-
-# ============================================================
-
-# CÁLCULO DE ACÚMULO
-
-# ============================================================
-
-acumulo = []
-estoque_atual = 0
-
-for _, row in df_base.iterrows():
-chegada_kg = row["Producao_ton"] * 1000
-funcionarios = row["Total"]
-capacidade_descarga_kg = (funcionarios * fator_kg_vol / tempo_descarga_por_pessoa) * 1800  # 1800s = 30min
-# Atualiza o estoque
-estoque_atual = estoque_atual + chegada_kg - capacidade_descarga_kg
-if estoque_atual < 0:
-estoque_atual = 0
-acumulo.append(estoque_atual / 1000)  # converte para toneladas
-
-df_base["Acumulado_ton"] = acumulo
-
-# ============================================================
-
-# GRÁFICO
-
-# ============================================================
-
+# Gráfico
 fig = go.Figure()
 
-# Barras de produção
-
+# Barras (Produção)
 fig.add_trace(go.Bar(
-x=df_base["Hora_dt"],
-y=df_base["Producao_ton"],
-name="Produção (Ton)",
-marker_color="#90EE90",
-opacity=0.8
+    x=df["Hora"], y=df["Produção (t)"],
+    name="Produção (t)",
+    marker_color="#90EE90", opacity=0.85
 ))
 
-# Linha acumulada (estoque)
-
+# Linha (Capacidade)
 fig.add_trace(go.Scatter(
-x=df_base["Hora_dt"],
-y=df_base["Acumulado_ton"],
-name="Acumulado (Ton)",
-mode="lines",
-line=dict(color="#1E90FF", width=4),
-fill="tozeroy",
-fillcolor="rgba(30,144,255,0.2)"
+    x=df_capacidade["Hora"], y=df_capacidade["Capacidade (t)"],
+    name="Capacidade (t)",
+    mode="lines",
+    line=dict(color="#9B59B6", width=4)
 ))
+
+# Rótulos
+if rotulos:
+    for _, r in df.iterrows():
+        fig.add_annotation(
+            x=r["Hora"], y=r["Produção (t)"],
+            text=f"{r['Produção (t)']:.1f}",
+            font=dict(color="#90EE90", size=9),
+            bgcolor="white", bordercolor="#90EE90", borderwidth=1,
+            showarrow=False, yshift=10
+        )
+        fig.add_annotation(
+            x=r["Hora"], y=r["Capacidade (t)"],
+            text=f"{r['Capacidade (t)']:.1f}",
+            font=dict(color="#9B59B6", size=9),
+            bgcolor="white", bordercolor="#9B59B6", borderwidth=1,
+            showarrow=False, yshift=0
+        )
+
+# Layout
+max_y = max(df["Capacidade (t)"].max(), df["Produção (t)"].max()) * 1.1
 
 fig.update_layout(
-title="Acúmulo x Produção (Simulação de Descarga)",
-xaxis_title="Horário",
-yaxis_title="Toneladas",
-hovermode="x unified",
-barmode="overlay",
-height=650,
-margin=dict(l=40, r=40, t=40, b=40),
-legend=dict(orientation="h", y=-0.2)
+    xaxis_title="Hora",
+    yaxis=dict(title="Toneladas", range=[0, max_y]),
+    height=650,
+    hovermode="x unified",
+    legend=dict(x=0, y=1.1, orientation="h"),
+    barmode="group",
+    margin=dict(l=60, r=60, t=40, b=60),
+    plot_bgcolor="white",
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
-# ============================================================
-
-# TABELA DE RESULTADOS
-
-# ============================================================
-
-st.dataframe(df_base[["Hora_dt", "Producao_ton", "Total", "Acumulado_ton"]].rename(columns={
-"Hora_dt": "Horário",
-"Producao_ton": "Produção (ton)",
-"Total": "Funcionários",
-"Acumulado_ton": "Acumulado (ton)"
-}), use_container_width=True)
+# Dados detalhados
+with st.expander("📋 Ver dados detalhados"):
+    st.dataframe(df.style.format({
+        "Capacidade_kg": "{:,.1f}",
+        "Capacidade (t)": "{:,.1f}",
+        "Produção (t)": "{:,.1f}"
+    }))
