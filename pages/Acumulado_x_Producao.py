@@ -7,11 +7,11 @@ import io
 # =============================================
 # CONFIGURAÇÃO
 # =============================================
-st.set_page_config(layout="wide", page_title="Logística + Funcionários (Pessoas Inteiras)")
-st.title("Logística + Número de Funcionários por Hora (Inteiros)")
+st.set_page_config(layout="wide", page_title="Logística + Funcionários (Cruzamento Meia-Noite)")
+st.title("Logística + Funcionários por Hora (Jornadas Cruzam Meia-Noite)")
 
 # =============================================
-# CONFIGURAÇÕES DINÂMICAS
+# CONFIGURAÇÕES
 # =============================================
 st.sidebar.header("Tempos de Operação (segundos)")
 t_descarga = st.sidebar.number_input("Descarga (Auxiliar)", value=30, min_value=1)
@@ -19,9 +19,7 @@ t_carga = st.sidebar.number_input("Carga (Conferente)", value=28, min_value=1)
 
 fator_kg_vol = st.sidebar.number_input("1 vol = ? kg", value=16.10, min_value=0.1, step=0.1, format="%.2f")
 
-# FATOR DE ESCALA PARA VISUALIZAR PESSOAS NO GRÁFICO (ton/pessoa)
-escala_pessoa = st.sidebar.slider("Escala visual (ton por pessoa)", 1.0, 10.0, 3.0, 0.5)
-
+escala_pessoas = st.sidebar.slider("Escala visual (ton/pessoa)", 1.0, 10.0, 3.0, 0.5)
 rotulos = st.checkbox("Exibir rótulos", True)
 
 # =============================================
@@ -255,7 +253,9 @@ def ler_bytes(b, fallback):
         return "\n".join(" ".join(map(str, r)) for r in df.values)
 
 def min_hora(h):
-    try: return sum(int(x) * (60 ** i) for i, x in enumerate(reversed(h.split(":"))))
+    try:
+        hh, mm = map(int, h.split(":"))
+        return hh * 60 + mm
     except: return 0
 
 def extrair_movimentos(texto):
@@ -290,35 +290,68 @@ cheg = extrair_movimentos(chegadas_txt)
 said = extrair_movimentos(saidas_txt)
 
 # =============================================
-# HORÁRIOS E FUNCIONÁRIOS (INTEIRO)
+# HORÁRIOS + CRUZAMENTO DE MEIA-NOITE
 # =============================================
 horas_set = set(cheg.keys()) | set(said.keys())
+max_min = 0
 for txt in [conf_txt, aux_txt]:
     for l in txt.splitlines():
         p = l.split()
-        if len(p) >= 4: horas_set.update(p[:4])
-horarios = sorted(horas_set, key=min_hora)
+        if len(p) >= 4:
+            for h in p[:4]:
+                m = min_hora(h)
+                if m < min_hora(p[0]):  # hora final < inicial → dia seguinte
+                    m += 1440
+                horas_set.add(h)
+                max_min = max(max_min, m)
 
-timeline_min = [min_hora(h) for h in horarios]
+# Gerar timeline completa: 00:00 até última saída + 1h
+timeline_min = []
+current = 0
+while current <= max_min + 60:
+    h = current % 1440
+    hh = h // 60
+    mm = h % 60
+    timeline_min.append(f"{hh:02d}:{mm:02d}")
+    current += 15  # a cada 15 min (ajustável)
+
+# Remover duplicatas
+horarios = sorted(set(timeline_min + list(horas_set)), key=min_hora)
+
+timeline_min_vals = [min_hora(h) + (1440 if min_hora(h) < min_hora(horarios[0]) else 0) for h in horarios]
+
+# =============================================
+# CONTAGEM DE FUNCIONÁRIOS (COM CRUZAMENTO)
+# =============================================
 conf_count = [0] * len(horarios)
 aux_count = [0] * len(horarios)
 
-def aplicar_jornada(j, tl, contador):
+def aplicar_jornada_com_cruzamento(j, tl_vals, contador):
     e = min_hora(j["e"])
-    sf = min_hora(j["sf"])
-    if "si" in j:
-        si = min_hora(j["si"])
-        ri = min_hora(j["ri"])
-        for i, t in enumerate(tl):
-            if (e <= t < si) or (ri <= t <= sf):
-                contador[i] += j["q"]
-    else:
-        for i, t in enumerate(tl):
-            if e <= t <= sf:
-                contador[i] += j["q"]
+    sf = min_hora(j.get("sf", j.get("si", "")))
+    si = min_hora(j.get("si", "")) if "si" in j else -1
+    ri = min_hora(j.get("ri", "")) if "ri" in j else -1
 
-for j in extrair_jornadas(conf_txt): aplicar_jornada(j, timeline_min, conf_count)
-for j in extrair_jornadas(aux_txt):   aplicar_jornada(j, timeline_min, aux_count)
+    # Ajustar para dia seguinte
+    if sf < e: sf += 1440
+    if si != -1 and si < e: si += 1440
+    if ri != -1 and ri < e: ri += 1440
+
+    for i, t in enumerate(tl_vals):
+        t_adj = t + (1440 if t < e else 0)
+        active = False
+        if si == -1:  # sem intervalo
+            active = e <= t_adj <= sf
+        else:
+            active = (e <= t_adj < si) or (ri <= t_adj <= sf)
+        if active:
+            contador[i] += j["q"]
+
+# Aplicar
+for j in extrair_jornadas(conf_txt):
+    aplicar_jornada_com_cruzamento(j, timeline_min_vals, conf_count)
+for j in extrair_jornadas(aux_txt):
+    aplicar_jornada_com_cruzamento(j, timeline_min_vals, aux_count)
 
 # GARANTIR INTEIRO
 conf_count = [int(x) for x in conf_count]
@@ -344,7 +377,7 @@ for _, row in df.iterrows():
 df["Acumulado_ton"] = acumulado_list
 
 # =============================================
-# GRÁFICO: SÓ PESSOAS (escaladas para aparecer)
+# GRÁFICO
 # =============================================
 fig = go.Figure()
 
@@ -353,11 +386,15 @@ fig.add_trace(go.Bar(x=df["Horario"], y=-df["Saida_ton"], name="Saída", marker_
 fig.add_trace(go.Scatter(x=df["Horario"], y=df["Acumulado_ton"], mode="lines", name="Acumulado",
                          fill="tozeroy", fillcolor="rgba(148,103,189,0.4)", line=dict(color="#9467bd", width=3)))
 
-# PESSOAS ESCALADAS (para aparecer no gráfico)
-fig.add_trace(go.Scatter(x=df["Horario"], y=df["Conferentes"] * escala_pessoa, mode="lines+markers",
-                         name="Conferentes (pessoas)", line=dict(color="#1f77b4", width=2), marker=dict(size=5)))
-fig.add_trace(go.Scatter(x=df["Horario"], y=df["Auxiliares"] * escala_pessoa, mode="lines+markers",
-                         name="Auxiliares (pessoas)", line=dict(color="#006400", width=2), marker=dict(size=5)))
+# PESSOAS (escala visual)
+fig.add_trace(go.Scatter(x=df["Horario"], y=df["Conferentes"] * escala_pessoas, mode="lines+markers",
+                         name="Conferentes", line=dict(color="#1f77b4", width=2), marker=dict(size=5),
+                         customdata=df[["Conferentes"]].values,
+                         hovertemplate="<b>%{x}</b><br>Conferentes: %{customdata[0]}<extra></extra>"))
+fig.add_trace(go.Scatter(x=df["Horario"], y=df["Auxiliares"] * escala_pessoas, mode="lines+markers",
+                         name="Auxiliares", line=dict(color="#006400", width=2), marker=dict(size=5),
+                         customdata=df[["Auxiliares"]].values,
+                         hovertemplate="<b>%{x}</b><br>Auxiliares: %{customdata[0]}<extra></extra>"))
 
 # Rótulos
 if rotulos:
@@ -371,12 +408,11 @@ if rotulos:
                                text=f"-{r['Saida_ton']:.1f}", font=dict(color="white", size=9),
                                bgcolor="#d62728", showarrow=False, yshift=-8)
 
-# Layout
-max_y = max(df[["Chegada_ton", "Acumulado_ton"]].max().max(), df[["Conferentes", "Auxiliares"]].max().max() * escala_pessoa) * 1.2
+max_y = max(df[["Chegada_ton", "Acumulado_ton"]].max().max(), df[["Conferentes", "Auxiliares"]].max().max() * escala_pessoas) * 1.2
 min_y = -df["Saida_ton"].max() * 1.2
 
 fig.update_layout(
-    title="Logística + Número de Funcionários (Inteiros)",
+    title="Logística + Funcionários (Cruzamento Meia-Noite)",
     xaxis_title="Horário",
     yaxis=dict(title="Toneladas", range=[min_y, max_y]),
     barmode="relative",
@@ -387,42 +423,28 @@ fig.update_layout(
     plot_bgcolor="white"
 )
 
-# Hover personalizado para mostrar número real de pessoas
-fig.update_traces(
-    hovertemplate="<b>%{x}</b><br>Conferentes: %{customdata[0]}<br>Auxiliares: %{customdata[1]}<extra></extra>",
-    selector=dict(name="Conferentes (pessoas)"),
-    customdata=df[["Conferentes", "Auxiliares"]].values
-)
-fig.update_traces(
-    hovertemplate="<b>%{x}</b><br>Conferentes: %{customdata[0]}<br>Auxiliares: %{customdata[1]}<extra></extra>",
-    selector=dict(name="Auxiliares (pessoas)"),
-    customdata=df[["Conferentes", "Auxiliares"]].values
-)
-
 st.plotly_chart(fig, use_container_width=True)
 
 # =============================================
-# MÉTRICAS
+# MÉTRICAS + TABELA
 # =============================================
 st.markdown("### Métricas")
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 col1.metric("Chegada Total", f"{df['Chegada_ton'].sum():.1f} ton")
 col2.metric("Saída Total", f"{df['Saida_ton'].sum():.1f} ton")
 col3.metric("Acumulado Final", f"{df['Acumulado_ton'].iloc[-1]:.1f} ton")
+col4.metric("Máx Funcionários", f"{df[['Conferentes','Auxiliares']].sum(axis=1).max()}")
 
-# =============================================
-# TABELA (INTEIROS)
-# =============================================
 with st.expander("Tabela Completa"):
     df_disp = df.copy()
-    df_disp["Conferentes"] = df_disp["Conferentes"].astype(int)
-    df_disp["Auxiliares"] = df_disp["Auxiliares"].astype(int)
+    df_disp["Total_Pessoas"] = df_disp["Conferentes"] + df_disp["Auxiliares"]
     st.dataframe(df_disp.style.format({
         "Chegada_ton": "{:.1f}",
         "Saida_ton": "{:.1f}",
         "Acumulado_ton": "{:.1f}",
         "Conferentes": "{:d}",
-        "Auxiliares": "{:d}"
+        "Auxiliares": "{:d}",
+        "Total_Pessoas": "{:d}"
     }), use_container_width=True)
     csv = df_disp.to_csv(index=False).encode()
-    st.download_button("Baixar CSV", csv, "logistica_pessoas.csv", "text/csv")
+    st.download_button("Baixar CSV", csv, "logistica_cruzamento.csv", "text/csv")
