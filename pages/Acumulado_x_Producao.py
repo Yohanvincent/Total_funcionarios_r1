@@ -1,21 +1,43 @@
+# pages/1_Toneladas_Acumuladas_Unificado.py
 import streamlit as st
 import pandas as pd
-import numpy as np
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from datetime import datetime, timedelta
+import io
+from datetime import datetime
 
-# -------------------------------------------------
-# Configuração da página
-# -------------------------------------------------
-st.set_page_config(page_title="Análise de Toneladas Acumuladas", layout="wide")
-st.title("📦 Análise de Toneladas Acumuladas no CD")
+# =============================================
+# CONFIGURAÇÃO DA PÁGINA
+# =============================================
+st.set_page_config(layout="wide", page_title="Toneladas Acumuladas")
+st.title("📦 Análise Unificada: Produção, Capacidade, Funcionários e Estoque no Pátio")
 
-# -------------------------------------------------
-# Dados de entrada (exemplo fornecido)
-# -------------------------------------------------
-chegadas_raw = """
-00:00 1,7
+# Checkbox de rótulos
+rotulos = st.checkbox("Exibir rótulos", True)
+
+# =============================================
+# SIDEBAR - PARÂMETROS
+# =============================================
+st.sidebar.header("Parâmetros Operacionais")
+tempo_desc = st.sidebar.number_input("Tempo descarregamento (s)", value=30, min_value=1)
+tempo_carr = st.sidebar.number_input("Tempo carregamento (s)", value=38, min_value=1)
+fator_kg_vol = st.sidebar.number_input("Fator kg/vol", value=16.10, step=0.1, format="%.2f")
+kg_por_m3 = st.sidebar.number_input("1 m³ = kg", value=300.0)
+
+# =============================================
+# SESSION STATE - PERSISTÊNCIA DE UPLOADS
+# =============================================
+keys = [
+    "chegadas_bytes", "saidas_bytes", "conf_bytes", "aux_bytes", "capacidade_bytes",
+    "chegadas_name", "saidas_name", "conf_name", "aux_name", "capacidade_name"
+]
+for k in keys:
+    if k not in st.session_state:
+        st.session_state[k] = None
+
+# =============================================
+# DADOS PADRÃO (do seu exemplo)
+# =============================================
+padrao_chegadas = """00:00 1,7
 00:00 6,3
 00:20 14,9
 00:30 2,6
@@ -107,11 +129,9 @@ chegadas_raw = """
 22:45 7,3
 23:00 2,6
 23:15 1,4
-23:20 8,2
-"""
+23:20 8,2"""
 
-saidas_raw = """
-00:00 0,1
+padrao_saidas = """00:00 0,1
 00:30 1,4
 00:30 1,3
 00:45 6,1
@@ -203,22 +223,18 @@ saidas_raw = """
 23:30 1,8
 23:30 0,0
 23:30 0,3
-23:30 0,6
-"""
+23:30 0,6"""
 
-conferentes_raw = """
-01:00 04:00 05:05 10:23 1
+padrao_conf = """01:00 04:00 05:05 10:23 1
 16:00 20:00 21:05 01:24 2
 18:30 22:30 23:30 03:38 4
 19:00 23:00 00:05 04:09 8
 21:00 01:00 02:05 06:08 5
 22:00 02:00 03:05 07:03 9
 23:30 03:30 04:35 08:49 19
-23:50 02:40 03:45 09:11 4
-"""
+23:50 02:40 03:45 09:11 4"""
 
-auxiliares_raw = """
-16:00 20:00 21:05 01:24 5
+padrao_aux = """16:00 20:00 21:05 01:24 5
 18:00 22:00 23:00 03:12 1
 19:00 22:52 12
 19:00 23:00 00:05 04:09 13
@@ -227,11 +243,9 @@ auxiliares_raw = """
 21:30 01:30 02:30 06:33 1
 22:00 02:00 03:05 07:03 20
 23:30 03:30 04:35 08:49 25
-23:50 02:40 03:45 09:11 1
-"""
+23:50 02:40 03:45 09:11 1"""
 
-capacidade_raw = """
-00:00 4.779
+padrao_capacidade = """00:00 4.779
 01:00 3.197
 02:00 3.411
 03:00 3.790
@@ -254,241 +268,219 @@ capacidade_raw = """
 20:00 1.844
 21:00 3.561
 22:00 4.121
-23:00 3.585
-"""
+23:00 3.585"""
 
-# -------------------------------------------------
-# Funções auxiliares
-# -------------------------------------------------
-def parse_time(s):
-    return datetime.strptime(s, "%H:%M").replace(year=2025, month=1, day=1)
+# =============================================
+# FUNÇÕES AUXILIARES
+# =============================================
+def ler_bytes(b, fallback):
+    if b is None: return fallback
+    try:
+        return b.decode("utf-8")
+    except:
+        df = pd.read_excel(io.BytesIO(b), header=None)
+        return "\n".join(" ".join(map(str, r)) for r in df.values)
 
-def parse_raw_movimentos(raw):
-    linhas = [l.strip() for l in raw.strip().splitlines() if l.strip()]
-    data = []
-    for linha in linhas:
-        partes = linha.split()
-        hora = partes[0]
-        ton = float(partes[1].replace(',', '.'))
-        data.append({"hora": parse_time(hora), "ton": ton})
-    return pd.DataFrame(data)
+def min_hora(h):
+    try: return sum(int(x) * (60 ** i) for i, x in enumerate(reversed(h.split(":"))))
+    except: return 0
 
-def parse_raw_jornada(raw, tipo):
-    linhas = [l.strip() for l in raw.strip().splitlines() if l.strip()]
-    data = []
-    for linha in linhas:
-        partes = linha.split()
-        entrada = parse_time(partes[0])
-        saida_intervalo = parse_time(partes[1])
-        retorno_intervalo = parse_time(partes[2])
-        saida_final = parse_time(partes[3])
-        qtd = int(partes[4])
-        for _ in range(qtd):
-            data.append({
-                "tipo": tipo,
-                "entrada": entrada,
-                "saida_intervalo": saida_intervalo,
-                "retorno_intervalo": retorno_intervalo,
-                "saida_final": saida_final
-            })
-    return pd.DataFrame(data)
+def extrair_movimentos(texto):
+    data = {}
+    for l in texto.strip().splitlines():
+        p = l.strip().split()
+        if len(p) >= 2:
+            h, v = p[0], p[1].replace(",", ".")
+            try: data[h] = data.get(h, 0) + float(v)
+            except: pass
+    return data
 
-def parse_capacidade(raw):
-    linhas = [l.strip() for l in raw.strip().splitlines() if l.strip()]
-    data = []
-    for linha in linhas:
-        partes = linha.split()
-        hora = parse_time(partes[0])
-        cap = float(partes[1].replace(',', '.').replace('.', '', partes[1].count('.')-1))
-        data.append({"hora": hora, "capacidade": cap})
-    return pd.DataFrame(data)
+def extrair_jornadas(texto):
+    jornadas = []
+    for l in texto.strip().splitlines():
+        p = l.strip().split()
+        if len(p) == 5 and p[4].isdigit():
+            jornadas.append({"e": p[0], "si": p[1], "ri": p[2], "sf": p[3], "q": int(p[4])})
+        elif len(p) == 3 and p[2].isdigit():
+            jornadas.append({"e": p[0], "sf": p[1], "q": int(p[2]), "tipo": "meia"})
+    return jornadas
 
-# -------------------------------------------------
-# Carregamento dos dados
-# -------------------------------------------------
-df_chegadas = parse_raw_movimentos(chegadas_raw)
-df_saidas   = parse_raw_movimentos(saidas_raw)
-df_conf     = parse_raw_jornada(conferentes_raw, "Conferente")
-df_aux      = parse_raw_jornada(auxiliares_raw, "Auxiliar")
-df_cap      = parse_capacidade(capacidade_raw)
+def extrair_capacidade(texto):
+    cap = {}
+    for l in texto.strip().splitlines():
+        p = l.strip().split()
+        if len(p) >= 2:
+            h, v = p[0], p[1].replace(",", ".")
+            try: cap[h] = float(v)
+            except: pass
+    return cap
 
-# -------------------------------------------------
-# Parâmetros configuráveis (sidebar)
-# -------------------------------------------------
-st.sidebar.header("Parâmetros Operacionais")
-tempo_desc = st.sidebar.number_input("Tempo descarregamento por pessoa (s)", value=30, min_value=1)
-tempo_carr = st.sidebar.number_input("Tempo carregamento por pessoa (s)", value=38, min_value=1)
-kg_por_vol = st.sidebar.number_input("Fator kg/vol (kg)", value=16.10, min_value=0.0)
-kg_por_m3  = st.sidebar.number_input("1 m³ = kg", value=300.0, min_value=0.0)
+# =============================================
+# CARREGAR DADOS
+# =============================================
+chegadas_txt = ler_bytes(st.session_state.chegadas_bytes, padrao_chegadas)
+saidas_txt   = ler_bytes(st.session_state.saidas_bytes, padrao_saidas)
+conf_txt     = ler_bytes(st.session_state.conf_bytes, padrao_conf)
+aux_txt      = ler_bytes(st.session_state.aux_bytes, padrao_aux)
+cap_txt      = ler_bytes(st.session_state.capacidade_bytes, padrao_capacidade)
 
-# -------------------------------------------------
-# Cálculo de funcionários por hora
-# -------------------------------------------------
-inicio = datetime(2025,1,1,0,0)
-fim    = datetime(2025,1,2,0,0)
-horas = pd.date_range(inicio, fim, freq='H')[:-1]
+cheg = extrair_movimentos(chegadas_txt)
+said = extrair_movimentos(saidas_txt)
+capacidade_hora = extrair_capacidade(cap_txt)
 
-def funcionarios_por_hora(df_jornada):
-    serie = pd.Series(0, index=horas)
-    for _, row in df_jornada.iterrows():
-        # intervalo de almoço
-        periodos = [
-            (row["entrada"], row["saida_intervalo"]),
-            (row["retorno_intervalo"], row["saida_final"])
-        ]
-        for start, end in periodos:
-            serie.loc[start:end] += 1
-    return serie
+# =============================================
+# COLETAR TODAS AS HORAS ÚNICAS
+# =============================================
+horas_set = set(cheg.keys()) | set(said.keys()) | set(capacidade_hora.keys())
+for texto in [conf_txt, aux_txt]:
+    for l in texto.splitlines():
+        p = l.split()
+        if len(p) >= 4: horas_set.update(p[:4])
+horarios = sorted(horas_set, key=min_hora)
 
-func_conf = funcionarios_por_hora(df_conf)
-func_aux  = funcionarios_por_hora(df_aux)
-func_total = func_conf + func_aux
+# =============================================
+# CALCULAR FUNCIONÁRIOS POR HORÁRIO
+# =============================================
+timeline_min = [min_hora(h) for h in horarios]
+func_total = [0] * len(horarios)
 
-# -------------------------------------------------
-# Cálculo de capacidade por hora (ton/h)
-# -------------------------------------------------
-# 3600 s/h
-cap_desc = (3600 / tempo_desc) / 1000   # ton/h por pessoa (1 ton = 1000 kg)
-cap_carr = (3600 / tempo_carr) / 1000   # ton/h por pessoa
-
-# Supondo que conferentes descarregam e auxiliares carregam
-capacidade_calc = (func_conf * cap_desc) + (func_aux * cap_carr)
-
-# Mesclando com a capacidade informada (quando houver)
-capacidade_final = pd.Series(0.0, index=horas)
-for h in horas:
-    mask = df_cap["hora"].apply(lambda x: x.time()) == h.time()
-    if mask.any():
-        capacidade_final[h] = df_cap.loc[mask, "capacidade"].iloc[0]
+def aplicar_jornada(j, tl):
+    e = min_hora(j["e"])
+    sf = min_hora(j["sf"])
+    if "si" in j:
+        si = min_hora(j["si"])
+        ri = min_hora(j["ri"])
+        for i, t in enumerate(tl):
+            if (e <= t < si) or (ri <= t <= sf):
+                func_total[i] += j["q"]
     else:
-        capacidade_final[h] = capacidade_calc[h]
+        for i, t in enumerate(tl):
+            if e <= t <= sf:
+                func_total[i] += j["q"]
 
-# -------------------------------------------------
-# Acumulado de toneladas
-# -------------------------------------------------
-# Agregando chegadas e saídas por hora
-chegadas_h = df_chegadas.groupby(df_chegadas["hora"].dt.floor('H'))["ton"].sum().reindex(horas, fill_value=0)
-saidas_h   = df_saidas.groupby(df_saidas["hora"].dt.floor('H'))["ton"].sum().reindex(horas, fill_value=0)
+for j in extrair_jornadas(conf_txt): aplicar_jornada(j, timeline_min)
+for j in extrair_jornadas(aux_txt):   aplicar_jornada(j, timeline_min)
 
-acumulado = (chegadas_h - saidas_h).cumsum()
+# =============================================
+# MONTAR DATAFRAME FINAL
+# =============================================
+def floor_hour(h):
+    hh = str(min_hora(h) // 60).zfill(2)
+    return f"{hh}:00"
 
-# -------------------------------------------------
-# Gráfico 1 - Barras + Linhas (produção + funcionários + capacidade)
-# -------------------------------------------------
-fig1 = make_subplots(specs=[[{"secondary_y": True}]])
-
-# Barras
-fig1.add_trace(go.Bar(
-    x=horas,
-    y=chegadas_h,
-    name="Chegadas (ton)",
-    marker_color="#2ca02c"
-), secondary_y=False)
-
-fig1.add_trace(go.Bar(
-    x=horas,
-    y=saidas_h,
-    name="Saídas (ton)",
-    marker_color="#d62728"
-), secondary_y=False)
-
-# Linhas
-fig1.add_trace(go.Scatter(
-    x=horas,
-    y=func_total,
-    mode='lines+markers',
-    name="Funcionários Disponíveis",
-    line=dict(color="#1f77b4", width=3)
-), secondary_y=True)
-
-fig1.add_trace(go.Scatter(
-    x=horas,
-    y=capacidade_final,
-    mode='lines+markers',
-    name="Capacidade (ton/h)",
-    line=dict(color="#ff7f0e", width=3, dash='dash')
-), secondary_y=True)
-
-fig1.update_xaxes(title_text="Hora do Dia")
-fig1.update_yaxes(title_text="Toneladas", secondary_y=False)
-fig1.update_yaxes(title_text="Funcionários / Capacidade (ton/h)", secondary_y=True)
-fig1.update_layout(
-    title="Produção Horária + Recursos Disponíveis",
-    barmode='stack',
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    height=600
-)
-
-st.plotly_chart(fig1, use_container_width=True)
-
-# -------------------------------------------------
-# Gráfico 2 - Acumulado de toneladas (linha com preenchimento)
-# -------------------------------------------------
-fig2 = go.Figure()
-
-fig2.add_trace(go.Scatter(
-    x=horas,
-    y=acumulado,
-    fill='tozeroy',
-    mode='lines',
-    name='Acumulado no Pátio',
-    line=dict(color="#9467bd"),
-    fillcolor="rgba(148,103,189,0.3)"
-))
-
-fig2.add_trace(go.Scatter(
-    x=horas,
-    y=chegadas_h.cumsum(),
-    mode='lines',
-    name='Total Chegadas (acum.)',
-    line=dict(color="#2ca02c", dash='dot')
-))
-
-fig2.add_trace(go.Scatter(
-    x=horas,
-    y=saidas_h.cumsum(),
-    mode='lines',
-    name='Total Saídas (acum.)',
-    line=dict(color="#d62728", dash='dot')
-))
-
-fig2.update_layout(
-    title="Acumulado de Toneladas no Pátio (Chegada - Saída)",
-    xaxis_title="Hora do Dia",
-    yaxis_title="Toneladas",
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    height=500
-)
-
-st.plotly_chart(fig2, use_container_width=True)
-
-# -------------------------------------------------
-# Resumo em tabela
-# -------------------------------------------------
-st.header("Resumo por Hora")
-resumo = pd.DataFrame({
-    "Hora": horas.strftime("%H:%M"),
-    "Chegadas (ton)": chegadas_h.round(2).values,
-    "Saídas (ton)": saidas_h.round(2).values,
-    "Funcionários": func_total.values,
-    "Capacidade (ton/h)": capacidade_final.round(2).values,
-    "Acumulado (ton)": acumulado.round(2).values
+df = pd.DataFrame({
+    "Horario": horarios,
+    "Chegada": [round(cheg.get(h, 0), 2) for h in horarios],
+    "Saida": [round(said.get(h, 0), 2) for h in horarios],
+    "Funcionarios": func_total,
+    "Capacidade": [capacidade_hora.get(floor_hour(h), 0) for h in horarios],
 })
-st.dataframe(resumo, use_container_width=True)
 
-# -------------------------------------------------
-# Download dos dados
-# -------------------------------------------------
-csv = resumo.to_csv(index=False).encode()
-st.download_button(
-    label="📥 Baixar Resumo (CSV)",
-    data=csv,
-    file_name="resumo_acumulado_toneladas.csv",
-    mime="text/csv"
+df["Acumulado"] = (df["Chegada"] - df["Saida"]).cumsum()
+
+# =============================================
+# GRÁFICO ÚNICO
+# =============================================
+fig = go.Figure()
+
+# 1. Barras: Chegada e Saída
+fig.add_trace(go.Bar(x=df["Horario"], y=df["Chegada"], name="Chegada (ton)", marker_color="#2ca02c"))
+fig.add_trace(go.Bar(x=df["Horario"], y=df["Saida"], name="Saída (ton)", marker_color="#d62728"))
+
+# 2. Capacidade (degrau hv)
+x_step, y_step = [], []
+for i, row in df.iterrows():
+    x_step.extend([row["Horario"], row["Horario"]])
+    y_step.extend([row["Capacidade"], row["Capacidade"]])
+    if i < len(df)-1:
+        x_step.append(df.iloc[i+1]["Horario"])
+        y_step.append(row["Capacidade"])
+x_step = x_step[1:-1]  # remove duplicatas
+y_step = y_step[1:-1]
+
+fig.add_trace(go.Scatter(
+    x=x_step, y=y_step, mode="lines", name="Capacidade (ton/h)",
+    line=dict(color="#9B59B6", width=4), hovertemplate="%{y:.1f} ton/h"
+))
+
+# 3. Funcionários (área)
+fig.add_trace(go.Scatter(
+    x=df["Horario"], y=df["Funcionarios"],
+    mode="lines", name="Funcionários",
+    fill="tozeroy", fillcolor="rgba(30, 144, 255, 0.3)",
+    line=dict(color="#1f77b4", width=3)
+))
+
+# 4. Acumulado no pátio (área secundária)
+fig.add_trace(go.Scatter(
+    x=df["Horario"], y=df["Acumulado"],
+    mode="lines", name="Acumulado no Pátio",
+    yaxis="y2", fill="tozeroy", fillcolor="rgba(148, 103, 189, 0.3)",
+    line=dict(color="#9467bd", width=3)
+))
+
+# Rótulos
+if rotulos:
+    for _, r in df.iterrows():
+        if r["Chegada"] > 0:
+            fig.add_annotation(x=r["Horario"], y=r["Chegada"], text=f"{r['Chegada']}", showarrow=False,
+                               font=dict(color="white", size=9), bgcolor="#2ca02c", yshift=10)
+        if r["Saida"] > 0:
+            fig.add_annotation(x=r["Horario"], y=r["Saida"], text=f"{r['Saida']}", showarrow=False,
+                               font=dict(color="white", size=9), bgcolor="#d62728", yshift=10)
+
+# Layout com dois eixos Y
+max_prod = (df["Chegada"] + df["Saida"]).max() * 1.2
+max_acum = df["Acumulado"].max() * 1.2
+
+fig.update_layout(
+    title="Análise Completa: Produção, Recursos e Estoque no Pátio",
+    xaxis_title="Horário",
+    yaxis=dict(title="Toneladas (Produção)", range=[0, max_prod]),
+    yaxis2=dict(title="Toneladas (Acumulado)", overlaying="y", side="right", range=[0, max_acum]),
+    barmode="stack",
+    hovermode="x unified",
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    height=700,
+    margin=dict(l=60, r=80, t=80, b=60)
 )
 
-# -------------------------------------------------
-# Footer
-# -------------------------------------------------
-st.markdown("---")
-st.caption("Desenvolvido para **Tela_Inicial** – Streamlit + Plotly | Dados de exemplo do dia 01/01/2025")
+st.plotly_chart(fig, use_container_width=True)
+
+# =============================================
+# UPLOADS (ABAIXO DO GRÁFICO)
+# =============================================
+st.markdown("### Upload de Arquivos (TXT, CSV, XLSX)")
+cols = st.columns(5)
+with cols[0]:
+    up_c = st.file_uploader("Chegadas", ["txt","csv","xlsx"], key="up_c")
+    if up_c: st.session_state.chegadas_bytes, st.session_state.chegadas_name = up_c.getvalue(), up_c.name
+    if st.session_state.chegadas_name: st.success(f"Chegadas: {st.session_state.chegadas_name}")
+with cols[1]:
+    up_s = st.file_uploader("Saídas", ["txt","csv","xlsx"], key="up_s")
+    if up_s: st.session_state.saidas_bytes, st.session_state.saidas_name = up_s.getvalue(), up_s.name
+    if st.session_state.saidas_name: st.success(f"Saídas: {st.session_state.saidas_name}")
+with cols[2]:
+    up_conf = st.file_uploader("Conferentes", ["txt","csv","xlsx"], key="up_conf")
+    if up_conf: st.session_state.conf_bytes, st.session_state.conf_name = up_conf.getvalue(), up_conf.name
+    if st.session_state.conf_name: st.success(f"Conf: {st.session_state.conf_name}")
+with cols[3]:
+    up_aux = st.file_uploader("Auxiliares", ["txt","csv","xlsx"], key="up_aux")
+    if up_aux: st.session_state.aux_bytes, st.session_state.aux_name = up_aux.getvalue(), up_aux.name
+    if st.session_state.aux_name: st.success(f"Aux: {st.session_state.aux_name}")
+with cols[4]:
+    up_cap = st.file_uploader("Capacidade", ["txt","csv","xlsx"], key="up_cap")
+    if up_cap: st.session_state.capacidade_bytes, st.session_state.capacidade_name = up_cap.getvalue(), up_cap.name
+    if st.session_state.capacidade_name: st.success(f"Cap: {st.session_state.capacidade_name}")
+
+# =============================================
+# DOWNLOAD + TABELA
+# =============================================
+with st.expander("Dados Consolidados"):
+    st.dataframe(df.style.format({
+        "Chegada": "{:.2f}", "Saida": "{:.2f}", "Acumulado": "{:.2f}",
+        "Funcionarios": "{:.0f}", "Capacidade": "{:.1f}"
+    }), use_container_width=True)
+
+    csv = df.to_csv(index=False).encode()
+    st.download_button("Baixar CSV", csv, "analise_unificada.csv", "text/csv")
