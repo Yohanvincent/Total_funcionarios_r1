@@ -2,43 +2,31 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import io
 
 # =============================================
 # CONFIGURAÇÃO
 # =============================================
-st.set_page_config(layout="wide", page_title="Logística Real")
-st.title("Logística Real com Produtividade Dinâmica")
+st.set_page_config(layout="wide", page_title="Logística + Funcionários")
+st.title("Logística Real + Funcionários por Hora")
 
 # =============================================
 # CONFIGURAÇÕES DINÂMICAS
 # =============================================
 st.sidebar.header("Tempos de Operação (segundos)")
-col1, col2 = st.sidebar.columns(2)
-with col1:
-    t_desc_conf = st.number_input("Descarga Conferente", value=15, min_value=1)
-    t_carga_conf = st.number_input("Carga Conferente", value=28, min_value=1)
-with col2:
-    t_desc_aux = st.number_input("Descarga Auxiliar", value=30, min_value=1)
-    t_carga_aux = st.number_input("Carga Auxiliar", value=38, min_value=1)
+t_descarga = st.sidebar.number_input("Descarga (Auxiliar)", value=30, min_value=1)
+t_carga = st.sidebar.number_input("Carga (Conferente)", value=28, min_value=1)
 
 fator_kg_vol = st.sidebar.number_input("1 vol = ? kg", value=16.10, min_value=0.1, step=0.1, format="%.2f")
 
-# =============================================
-# CÁLCULO DE PRODUTIVIDADE (kg/hora)
-# =============================================
-def calc_prod(t_desc, t_carga, fator):
-    tempo_total = t_desc + t_carga
-    vol_h = 3600 / tempo_total
-    kg_h = vol_h * fator
-    return round(kg_h, 1)
+# Produtividade (kg/h por pessoa)
+prod_descarga = (3600 / t_descarga) * fator_kg_vol  # auxiliar
+prod_carga = (3600 / t_carga) * fator_kg_vol        # conferente
 
-prod_conf = calc_prod(t_desc_conf, t_carga_conf, fator_kg_vol)
-prod_aux = calc_prod(t_desc_aux, t_carga_aux, fator_kg_vol)
-
-st.sidebar.markdown("### Produtividade Calculada")
-st.sidebar.metric("Conferente", f"{prod_conf:,.0f} kg/h")
-st.sidebar.metric("Auxiliar", f"{prod_aux:,.0f} kg/h")
+st.sidebar.markdown("### Produtividade por Função")
+st.sidebar.metric("Auxiliar (descarga)", f"{prod_descarga:,.0f} kg/h")
+st.sidebar.metric("Conferente (carga)", f"{prod_carga:,.0f} kg/h")
 
 rotulos = st.checkbox("Exibir rótulos", True)
 
@@ -286,14 +274,14 @@ def extrair_movimentos(texto):
             except: pass
     return d
 
-def extrair_jornadas(texto, tipo):
+def extrair_jornadas(texto):
     j = []
     for l in texto.strip().splitlines():
         p = l.strip().split()
         if len(p) == 5 and p[4].isdigit():
-            j.append({"e": p[0], "si": p[1], "ri": p[2], "sf": p[3], "q": int(p[4]), "tipo": tipo})
+            j.append({"e": p[0], "si": p[1], "ri": p[2], "sf": p[3], "q": int(p[4])})
         elif len(p) == 3 and p[2].isdigit():
-            j.append({"e": p[0], "sf": p[1], "q": int(p[2]), "tipo": tipo})
+            j.append({"e": p[0], "sf": p[1], "q": int(p[2])})
     return j
 
 # =============================================
@@ -308,7 +296,7 @@ cheg = extrair_movimentos(chegadas_txt)
 said = extrair_movimentos(saidas_txt)
 
 # =============================================
-# HORÁRIOS ÚNICOS
+# HORÁRIOS E FUNCIONÁRIOS
 # =============================================
 horas_set = set(cheg.keys()) | set(said.keys())
 for txt in [conf_txt, aux_txt]:
@@ -317,9 +305,6 @@ for txt in [conf_txt, aux_txt]:
         if len(p) >= 4: horas_set.update(p[:4])
 horarios = sorted(horas_set, key=min_hora)
 
-# =============================================
-# CONTAGEM DE FUNCIONÁRIOS POR TIPO
-# =============================================
 timeline_min = [min_hora(h) for h in horarios]
 conf_count = [0] * len(horarios)
 aux_count = [0] * len(horarios)
@@ -338,8 +323,8 @@ def aplicar_jornada(j, tl, contador):
             if e <= t <= sf:
                 contador[i] += j["q"]
 
-for j in extrair_jornadas(conf_txt, "conf"): aplicar_jornada(j, timeline_min, conf_count)
-for j in extrair_jornadas(aux_txt, "aux"):   aplicar_jornada(j, timeline_min, aux_count)
+for j in extrair_jornadas(conf_txt): aplicar_jornada(j, timeline_min, conf_count)
+for j in extrair_jornadas(aux_txt):   aplicar_jornada(j, timeline_min, aux_count)
 
 # =============================================
 # DATAFRAME
@@ -352,11 +337,12 @@ df = pd.DataFrame({
     "Auxiliares": aux_count,
 })
 
-# Produtividade total (kg/h → ton/h)
-df["Prod_kg_h"] = df["Conferentes"] * prod_conf + df["Auxiliares"] * prod_aux
-df["Processamento_ton_h"] = (df["Prod_kg_h"] / 1000).round(1)
+# Processamento total (ton/h)
+df["Processamento_ton_h"] = (
+    (df["Auxiliares"] * prod_descarga + df["Conferentes"] * prod_carga) / 1000
+).round(1)
 
-# Acumulado real (nunca negativo)
+# Acumulado real
 acumulado = 0.0
 acumulado_list = []
 for _, row in df.iterrows():
@@ -365,48 +351,44 @@ for _, row in df.iterrows():
 df["Acumulado_ton"] = acumulado_list
 
 # =============================================
-# GRÁFICO
+# GRÁFICO COM DOIS EIXOS
 # =============================================
-fig = go.Figure()
+fig = make_subplots(
+    rows=2, cols=1,
+    shared_xaxes=True,
+    vertical_spacing=0.1,
+    subplot_titles=("Logística: Chegada, Saída, Acumulado e Processamento", "Funcionários por Hora"),
+    row_heights=[0.7, 0.3]
+)
 
-fig.add_trace(go.Bar(x=df["Horario"], y=df["Chegada_ton"], name="Chegada (ton)", marker_color="#2ca02c"))
-fig.add_trace(go.Bar(x=df["Horario"], y=-df["Saida_ton"], name="Saída (ton)", marker_color="#d62728"))
+# --- GRÁFICO 1: LOGÍSTICA ---
+fig.add_trace(go.Bar(x=df["Horario"], y=df["Chegada_ton"], name="Chegada (ton)", marker_color="#2ca02c"), row=1, col=1)
+fig.add_trace(go.Bar(x=df["Horario"], y=-df["Saida_ton"], name="Saída (ton)", marker_color="#d62728"), row=1, col=1)
+fig.add_trace(go.Scatter(x=df["Horario"], y=df["Acumulado_ton"], mode="lines", name="Acumulado (ton)",
+                         fill="tozeroy", fillcolor="rgba(148,103,189,0.4)", line=dict(color="#9467bd", width=3)), row=1, col=1)
+fig.add_trace(go.Scatter(x=df["Horario"], y=df["Processamento_ton_h"], mode="lines", name="Processamento (ton/h)",
+                         line=dict(color="#ff7f0e", width=3, dash="dash")), row=1, col=1)
 
-fig.add_trace(go.Scatter(
-    x=df["Horario"], y=df["Acumulado_ton"],
-    mode="lines", name="Acumulado (ton)", fill="tozeroy",
-    fillcolor="rgba(148,103,189,0.4)", line=dict(color="#9467bd", width=3)
-))
+# --- GRÁFICO 2: FUNCIONÁRIOS ---
+fig.add_trace(go.Scatter(x=df["Horario"], y=df["Conferentes"], mode="lines+markers", name="Conferentes",
+                         line=dict(color="#1f77b4", width=2), marker=dict(size=5)), row=2, col=1)
+fig.add_trace(go.Scatter(x=df["Horario"], y=df["Auxiliares"], mode="lines+markers", name="Auxiliares",
+                         line=dict(color="#2ca02c", width=2), marker=dict(size=5)), row=2, col=1)
 
-fig.add_trace(go.Scatter(
-    x=df["Horario"], y=df["Processamento_ton_h"],
-    mode="lines", name="Processamento (ton/h)",
-    line=dict(color="#ff7f0e", width=3, dash="dash")
-))
+# Layout
+max_y1 = max(df[["Chegada_ton", "Acumulado_ton", "Processamento_ton_h"]].max().max() * 1.2, 10)
+min_y1 = -df["Saida_ton"].max() * 1.2
+max_y2 = df[["Conferentes", "Auxiliares"]].max().max() * 1.2
 
-if rotulos:
-    for _, r in df.iterrows():
-        if r["Chegada_ton"] > 0.1:
-            fig.add_annotation(x=r["Horario"], y=r["Chegada_ton"],
-                               text=f"+{r['Chegada_ton']:.1f}", font=dict(color="white", size=9),
-                               bgcolor="#2ca02c", showarrow=False, yshift=8)
-        if r["Saida_ton"] > 0.1:
-            fig.add_annotation(x=r["Horario"], y=-r["Saida_ton"],
-                               text=f"-{r['Saida_ton']:.1f}", font=dict(color="white", size=9),
-                               bgcolor="#d62728", showarrow=False, yshift=-8)
-
-max_y = df[["Chegada_ton", "Acumulado_ton", "Processamento_ton_h"]].max().max() * 1.2
-min_y = -df["Saida_ton"].max() * 1.2
+fig.update_yaxes(title_text="Toneladas", range=[min_y1, max_y1], row=1, col=1)
+fig.update_yaxes(title_text="Pessoas", range=[0, max_y2], row=2, col=1)
+fig.update_xaxes(title_text="Horário", row=2, col=1)
 
 fig.update_layout(
-    title="Logística com Produtividade Dinâmica (Conferente + Auxiliar)",
-    xaxis_title="Horário",
-    yaxis=dict(title="Toneladas", range=[min_y, max_y]),
-    barmode="relative",
+    height=800,
     hovermode="x unified",
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    height=700,
-    margin=dict(l=70, r=70, t=90, b=60),
+    margin=dict(l=70, r=70, t=50, b=60),
     plot_bgcolor="white"
 )
 
@@ -415,10 +397,10 @@ st.plotly_chart(fig, use_container_width=True)
 # =============================================
 # MÉTRICAS
 # =============================================
-st.markdown("### Métricas Operacionais")
+st.markdown("### Métricas")
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Total Chegada", f"{df['Chegada_ton'].sum():.1f} ton")
-col2.metric("Total Saída", f"{df['Saida_ton'].sum():.1f} ton")
+col1.metric("Chegada Total", f"{df['Chegada_ton'].sum():.1f} ton")
+col2.metric("Saída Total", f"{df['Saida_ton'].sum():.1f} ton")
 col3.metric("Acumulado Final", f"{df['Acumulado_ton'].iloc[-1]:.1f} ton")
 col4.metric("Processamento Médio", f"{df['Processamento_ton_h'].mean():.1f} ton/h")
 
@@ -428,11 +410,11 @@ col4.metric("Processamento Médio", f"{df['Processamento_ton_h'].mean():.1f} ton
 st.markdown("### Upload de Arquivos")
 cols = st.columns(4)
 with cols[0]:
-    up = st.file_uploader("Chegadas (ton)", ["txt","csv","xlsx"], key="c")
+    up = st.file_uploader("Chegadas", ["txt","csv","xlsx"], key="c")
     if up: st.session_state.chegadas_bytes, st.session_state.chegadas_name = up.getvalue(), up.name
     if st.session_state.chegadas_name: st.success(st.session_state.chegadas_name)
 with cols[1]:
-    up = st.file_uploader("Saídas (ton)", ["txt","csv","xlsx"], key="s")
+    up = st.file_uploader("Saídas", ["txt","csv","xlsx"], key="s")
     if up: st.session_state.saidas_bytes, st.session_state.saidas_name = up.getvalue(), up.name
     if st.session_state.saidas_name: st.success(st.session_state.saidas_name)
 with cols[2]:
@@ -456,4 +438,4 @@ with st.expander("Tabela Completa"):
         "Processamento_ton_h": "{:.1f}"
     }), use_container_width=True)
     csv = df.to_csv(index=False).encode()
-    st.download_button("Baixar CSV", csv, "logistica_dinamica.csv", "text/csv")
+    st.download_button("Baixar CSV", csv, "logistica_funcionarios.csv", "text/csv")
