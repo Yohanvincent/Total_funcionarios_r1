@@ -13,16 +13,16 @@ st.set_page_config(
 )
 
 # =============================================
-# AUTENTICAÇÃO (compatível com versão 0.3.0+)
+# AUTENTICAÇÃO (VERSÃO 0.2.3)
 # =============================================
 try:
     authenticator = stauth.Authenticate(
-        st.secrets["auth"].names,
-        st.secrets["auth"].usernames,
-        st.secrets["auth"].passwords,
-        cookie_name="logistica_dashboard",
-        key="chave_muito_forte_123456789",
-        cookie_expiry_days=7
+        st.secrets["auth"]["names"],
+        st.secrets["auth"]["usernames"],
+        st.secrets["auth"]["passwords"],
+        "logistica_dashboard",  # cookie_name
+        "chave_muito_forte_123456789",  # key
+        7  # cookie_expiry_days
     )
 except KeyError:
     st.error("❌ **secrets.toml não encontrado ou mal formatado!**")
