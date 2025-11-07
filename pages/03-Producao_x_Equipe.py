@@ -405,7 +405,7 @@ st.download_button("Baixar Excel", out, "producao_vs_equipe.xlsx", "application/
 st.markdown("### Dados Fixos Utilizados")
 col1, col2 = st.columns(2)
 with col1:
-    st.markdown("**Conferentes (CD Chapecó)**")
+    st.markdown("**Conferentes**")
     st.code(confer_fixa, language="text")
     st.markdown("**Produção - Chegada**")
     st.code(chegada_fixa, language="text")
