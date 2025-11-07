@@ -1,4 +1,4 @@
-# pages/1_Conferentes_vs_Auxiliares.py
+# pages/Auxiliar_x_Conferente.py
 # =============================================
 # OBJETIVO: Comparar disponibilidade de Conferentes vs Auxiliares
 # LAYOUT:
@@ -34,7 +34,7 @@ for key in ["conf_bytes", "aux_bytes", "conf_name", "aux_name"]:
         st.session_state[key] = None
 
 # =============================================
-# 4. DADOS PADRÃO (com cruzamento de meia-noite)
+# 4. DADOS PADRÃO
 # =============================================
 padrao_conf = (
     "01:00 04:00 05:05 10:23 1\n"
@@ -93,25 +93,26 @@ def extrair_jornadas(texto):
     return jornadas
 
 # =============================================
-# 7. COLETAR TODOS OS HORÁRIOS (INCLUINDO DIA SEGUINTE)
+# 7. COLETAR HORÁRIOS + TIMELINE (SEM ERRO)
 # =============================================
 jc = ler_bytes(st.session_state.conf_bytes, padrao_conf)
 ja = ler_bytes(st.session_state.aux_bytes, padrao_aux)
 
+# 1. Coletar todos os horários únicos
 horas_set = set()
 max_min = 0
 for texto in [jc, ja]:
     for linha in texto.strip().split("\n"):
         p = linha.strip().split()
         if len(p) in (3, 5):
-            for h in p[: -1]:
+            for h in p[:-1]:
                 m = minutos(h)
-                if m < minutos(p[0]):  # hora final < inicial → dia seguinte
+                if m < minutos(p[0]):  # dia seguinte
                     m += 1440
                 horas_set.add(h)
                 max_min = max(max_min, m)
 
-# Gerar timeline completa: 00:00 até última saída + 1h
+# 2. Gerar timeline completa (a cada 15 min)
 timeline_horas = []
 current = 0
 while current <= max_min + 60:
@@ -119,23 +120,27 @@ while current <= max_min + 60:
     hh = total_min // 60
     mm = total_min % 60
     hora_str = f"{hh:02d}:{mm:02d}"
-    if hora_str not in timeline_horas:
-        timeline_horas.append(hora_str)
-    current += 15  # a cada 15 min
+    timeline_horas.append(hora_str)
+    current += 15
 
-# Adicionar horários do set
-horarios = sorted(set(timeline_horas + list(horas_set)), key=lambda x: minutos(x) + (1440 if minutos(x) < minutos(horarios[0]) else 0) if len(horarios) > 0 else minutos(x))
+# 3. Unir todos os horários
+todos_horarios = sorted(set(timeline_horas + list(horas_set)), key=minutos)
 
-# Timeline em minutos (com +1440 se dia seguinte)
+# 4. Criar timeline ajustada com +1440 para dia seguinte
 timeline_min = []
-for h in horarios:
+for h in todos_horarios:
     m = minutos(h)
-    if m < minutos(horarios[0]) and m >= 0:
+    # Se o horário é menor que o primeiro e não é 00:00, é dia seguinte
+    if len(timeline_min) > 0 and m < timeline_min[0] and m >= 0:
         m += 1440
     timeline_min.append(m)
 
+# 5. Criar lista final de horários ordenada
+horarios = [h for _, h in sorted(zip(timeline_min, todos_horarios))]
+timeline_min = sorted(timeline_min)
+
 # =============================================
-# 8. CONTAGEM DE FUNCIONÁRIOS (COM CRUZAMENTO)
+# 8. CONTAGEM DE FUNCIONÁRIOS
 # =============================================
 conf = [0] * len(timeline_min)
 aux = [0] * len(timeline_min)
@@ -146,7 +151,6 @@ def aplicar_jornada_com_cruzamento(j, tl_vals, contador):
     si = minutos(j.get("si", "")) if "si" in j else -1
     ri = minutos(j.get("ri", "")) if "ri" in j else -1
 
-    # Ajustar para dia seguinte
     if sf < e: sf += 1440
     if si != -1 and si < e: si += 1440
     if ri != -1 and ri < e: ri += 1440
@@ -154,20 +158,18 @@ def aplicar_jornada_com_cruzamento(j, tl_vals, contador):
     for i, t in enumerate(tl_vals):
         t_adj = t + (1440 if t < e else 0)
         active = False
-        if si == -1:  # sem intervalo
+        if si == -1:
             active = e <= t_adj <= sf
         else:
             active = (e <= t_adj < si) or (ri <= t_adj <= sf)
         if active:
             contador[i] += j["q"]
 
-# Aplicar jornadas
 for j in extrair_jornadas(jc):
     aplicar_jornada_com_cruzamento(j, timeline_min, conf)
 for j in extrair_jornadas(ja):
     aplicar_jornada_com_cruzamento(j, timeline_min, aux)
 
-# GARANTIR INTEIRO
 conf = [int(x) for x in conf]
 aux = [int(x) for x in aux]
 
@@ -198,11 +200,9 @@ fig.add_trace(go.Scatter(
     fill="tozeroy", fillcolor="rgba(34, 139, 34, 0.3)"
 ))
 
-# Intervalo cinza (exemplo)
 if "09:30" in df["Horario"].values and "10:30" in df["Horario"].values:
     fig.add_vrect(x0="09:30", x1="10:30", fillcolor="gray", opacity=0.1, layer="below")
 
-# Rótulos
 if rotulos:
     for _, r in df.iterrows():
         if r["Conferentes"] > 0:
