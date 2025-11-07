@@ -82,7 +82,6 @@ if st.button(
     key="btn_aux_vs_conf"
 ):
     st.switch_page("pages/05-Auxiliar_x_Conferente.py")
-st.markdown("<br>", unsafe_allow_html=True)
 
 with col3:
     st.markdown("<br>", unsafe_allow_html=True)
