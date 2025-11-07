@@ -63,7 +63,7 @@ with col2:
         use_container_width=True,
         key="btn_prod"
     ):
-        st.switch_page("pages/Producao_vs_Equipe.py")
+        st.switch_page("pages/Producao_x_Equipe.py")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
