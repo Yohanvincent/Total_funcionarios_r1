@@ -43,7 +43,7 @@ with col2:
         use_container_width=True,
         key="btn_aux_vs_conf"
     ):
-        st.switch_page("pages/Auxiliar_x_Conferente.py")
+        st.switch_page("pages/05-Auxiliar_x_Conferente.py")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -53,7 +53,7 @@ with col2:
         use_container_width=True,
         key="btn_total"
     ):
-        st.switch_page("pages/Total_Funcionarios.py")
+        st.switch_page("pages/04-Total_Funcionarios.py")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -63,7 +63,7 @@ with col2:
         use_container_width=True,
         key="btn_acum"
     ):
-        st.switch_page("pages/Acumulado_x_Producao.py")
+        st.switch_page("pages/01-Acumulado_x_Producao.py")
 
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -73,7 +73,7 @@ with col2:
         use_container_width=True,
         key="btn_prod"
     ):
-        st.switch_page("pages/Producao_x_Equipe.py")
+        st.switch_page("pages/03-Producao_x_Equipe.py")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -83,7 +83,7 @@ with col2:
         use_container_width=True,
         key="btn_capac"
     ):
-        st.switch_page("pages/Capacidade_x_Producao.py")
+        st.switch_page("pages/02-Capacidade_x_Producao.py")
 
 with col3:
     st.markdown("<br>", unsafe_allow_html=True)
