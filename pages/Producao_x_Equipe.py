@@ -1,4 +1,4 @@
-# pages/3_Producao_vs_Equipe.py
+# pages/3_Producao_x_Equipe.py
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
