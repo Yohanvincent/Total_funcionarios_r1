@@ -8,7 +8,7 @@ import io
 # CONFIGURAÇÃO
 # =============================================
 st.set_page_config(layout="wide", page_title="Logística + Funcionários (Mesmo Eixo)")
-st.title("Logística + Produtividade por Função (Tudo em ton/h)")
+st.title("Logística + Produtividade (Funcionários Inteiros)")
 
 # =============================================
 # CONFIGURAÇÕES DINÂMICAS
@@ -295,7 +295,7 @@ cheg = extrair_movimentos(chegadas_txt)
 said = extrair_movimentos(saidas_txt)
 
 # =============================================
-# HORÁRIOS E FUNCIONÁRIOS
+# HORÁRIOS E FUNCIONÁRIOS (INTEIROS)
 # =============================================
 horas_set = set(cheg.keys()) | set(said.keys())
 for txt in [conf_txt, aux_txt]:
@@ -332,8 +332,8 @@ df = pd.DataFrame({
     "Horario": horarios,
     "Chegada_ton": [round(cheg.get(h, 0), 1) for h in horarios],
     "Saida_ton": [round(said.get(h, 0), 1) for h in horarios],
-    "Conferentes": conf_count,
-    "Auxiliares": aux_count,
+    "Conferentes": conf_count,        # INTEIRO
+    "Auxiliares": aux_count,          # INTEIRO
 })
 
 # Produtividade em ton/h (por função)
@@ -366,7 +366,7 @@ fig.add_trace(go.Scatter(x=df["Horario"], y=df["Acumulado_ton"], mode="lines", n
 fig.add_trace(go.Scatter(x=df["Horario"], y=df["Processamento_Total_ton_h"], mode="lines", name="Processamento Total",
                          line=dict(color="#ff7f0e", width=3, dash="dash")))
 
-# Produtividade por função
+# Produtividade por função (ton/h)
 fig.add_trace(go.Scatter(x=df["Horario"], y=df["Prod_Conferentes_ton_h"], mode="lines", name="Conferentes (ton/h)",
                          line=dict(color="#1f77b4", width=2)))
 fig.add_trace(go.Scatter(x=df["Horario"], y=df["Prod_Auxiliares_ton_h"], mode="lines", name="Auxiliares (ton/h)",
@@ -389,7 +389,7 @@ max_y = max(df[["Chegada_ton", "Acumulado_ton", "Processamento_Total_ton_h", "Pr
 min_y = -df["Saida_ton"].max() * 1.2
 
 fig.update_layout(
-    title="Logística + Produtividade (Tudo em ton/h)",
+    title="Logística + Produtividade (Funcionários Inteiros)",
     xaxis_title="Horário",
     yaxis=dict(title="Toneladas", range=[min_y, max_y]),
     barmode="relative",
@@ -413,29 +413,7 @@ col3.metric("Acumulado Final", f"{df['Acumulado_ton'].iloc[-1]:.1f} ton")
 col4.metric("Processamento Médio", f"{df['Processamento_Total_ton_h'].mean():.1f} ton/h")
 
 # =============================================
-# UPLOADS
-# =============================================
-st.markdown("### Upload de Arquivos")
-cols = st.columns(4)
-with cols[0]:
-    up = st.file_uploader("Chegadas", ["txt","csv","xlsx"], key="c")
-    if up: st.session_state.chegadas_bytes, st.session_state.chegadas_name = up.getvalue(), up.name
-    if st.session_state.chegadas_name: st.success(st.session_state.chegadas_name)
-with cols[1]:
-    up = st.file_uploader("Saídas", ["txt","csv","xlsx"], key="s")
-    if up: st.session_state.saidas_bytes, st.session_state.saidas_name = up.getvalue(), up.name
-    if st.session_state.saidas_name: st.success(st.session_state.saidas_name)
-with cols[2]:
-    up = st.file_uploader("Conferentes", ["txt","csv","xlsx"], key="conf")
-    if up: st.session_state.conf_bytes, st.session_state.conf_name = up.getvalue(), up.name
-    if st.session_state.conf_name: st.success(st.session_state.conf_name)
-with cols[3]:
-    up = st.file_uploader("Auxiliares", ["txt","csv","xlsx"], key="aux")
-    if up: st.session_state.aux_bytes, st.session_state.aux_name = up.getvalue(), up.name
-    if st.session_state.aux_name: st.success(st.session_state.aux_name)
-
-# =============================================
-# TABELA
+# TABELA (com inteiros)
 # =============================================
 with st.expander("Tabela Completa"):
     df_disp = df.copy()
@@ -445,7 +423,9 @@ with st.expander("Tabela Completa"):
         "Acumulado_ton": "{:.1f}",
         "Processamento_Total_ton_h": "{:.1f}",
         "Prod_Conferentes_ton_h": "{:.1f}",
-        "Prod_Auxiliares_ton_h": "{:.1f}"
+        "Prod_Auxiliares_ton_h": "{:.1f}",
+        "Conferentes": "{:.0f}",   # INTEIRO
+        "Auxiliares": "{:.0f}"     # INTEIRO
     }), use_container_width=True)
     csv = df.to_csv(index=False).encode()
-    st.download_button("Baixar CSV", csv, "logistica_mesmo_eixo.csv", "text/csv")
+    st.download_button("Baixar CSV", csv, "logistica_inteiros.csv", "text/csv")
