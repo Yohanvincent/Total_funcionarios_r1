@@ -425,7 +425,7 @@ max_y = max(df[["Chegada_ton", "Acumulado_ton", "Processamento_Total_ton_h"]].ma
 min_y = -df["Saida_ton"].max() * 1.2
 
 fig.update_layout(
-    title="Logística + Processamento Total (Linha Amarela)",
+    title="Processamento Total - CD",
     xaxis_title="Horário",
     yaxis=dict(title="Toneladas", range=[min_y, max_y]),
     barmode="relative",
