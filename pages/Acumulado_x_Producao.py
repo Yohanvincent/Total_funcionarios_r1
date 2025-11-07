@@ -7,8 +7,8 @@ import io
 # =============================================
 # CONFIGURAÇÃO
 # =============================================
-st.set_page_config(layout="wide", page_title="Logística + Funcionários (Mesmo Eixo)")
-st.title("Logística + Produtividade (Funcionários Inteiros)")
+st.set_page_config(layout="wide", page_title="Logística + Funcionários (Inteiros)")
+st.title("Logística + Produtividade (Funcionários 100% Inteiros)")
 
 # =============================================
 # CONFIGURAÇÕES DINÂMICAS
@@ -19,7 +19,7 @@ t_carga = st.sidebar.number_input("Carga (Conferente)", value=28, min_value=1)
 
 fator_kg_vol = st.sidebar.number_input("1 vol = ? kg", value=16.10, min_value=0.1, step=0.1, format="%.2f")
 
-# Produtividade por pessoa (kg/h → ton/h)
+# Produtividade por pessoa (ton/h)
 prod_descarga = (3600 / t_descarga) * fator_kg_vol / 1000  # ton/h por auxiliar
 prod_carga = (3600 / t_carga) * fator_kg_vol / 1000        # ton/h por conferente
 
@@ -295,7 +295,7 @@ cheg = extrair_movimentos(chegadas_txt)
 said = extrair_movimentos(saidas_txt)
 
 # =============================================
-# HORÁRIOS E FUNCIONÁRIOS (INTEIROS)
+# HORÁRIOS E FUNCIONÁRIOS (FORÇADO INTEIRO)
 # =============================================
 horas_set = set(cheg.keys()) | set(said.keys())
 for txt in [conf_txt, aux_txt]:
@@ -325,6 +325,10 @@ def aplicar_jornada(j, tl, contador):
 for j in extrair_jornadas(conf_txt): aplicar_jornada(j, timeline_min, conf_count)
 for j in extrair_jornadas(aux_txt):   aplicar_jornada(j, timeline_min, aux_count)
 
+# GARANTIR INTEIRO
+conf_count = [int(x) for x in conf_count]
+aux_count = [int(x) for x in aux_count]
+
 # =============================================
 # DATAFRAME
 # =============================================
@@ -336,7 +340,7 @@ df = pd.DataFrame({
     "Auxiliares": aux_count,          # INTEIRO
 })
 
-# Produtividade em ton/h (por função)
+# Produtividade em ton/h
 df["Prod_Conferentes_ton_h"] = (df["Conferentes"] * prod_carga).round(1)
 df["Prod_Auxiliares_ton_h"] = (df["Auxiliares"] * prod_descarga).round(1)
 df["Processamento_Total_ton_h"] = (df["Prod_Conferentes_ton_h"] + df["Prod_Auxiliares_ton_h"]).round(1)
@@ -350,23 +354,19 @@ for _, row in df.iterrows():
 df["Acumulado_ton"] = acumulado_list
 
 # =============================================
-# GRÁFICO ÚNICO (TUDO EM TONELADAS)
+# GRÁFICO ÚNICO
 # =============================================
 fig = go.Figure()
 
-# Chegada e Saída
 fig.add_trace(go.Bar(x=df["Horario"], y=df["Chegada_ton"], name="Chegada", marker_color="#2ca02c"))
 fig.add_trace(go.Bar(x=df["Horario"], y=-df["Saida_ton"], name="Saída", marker_color="#d62728"))
 
-# Acumulado
 fig.add_trace(go.Scatter(x=df["Horario"], y=df["Acumulado_ton"], mode="lines", name="Acumulado",
                          fill="tozeroy", fillcolor="rgba(148,103,189,0.4)", line=dict(color="#9467bd", width=3)))
 
-# Processamento total
 fig.add_trace(go.Scatter(x=df["Horario"], y=df["Processamento_Total_ton_h"], mode="lines", name="Processamento Total",
                          line=dict(color="#ff7f0e", width=3, dash="dash")))
 
-# Produtividade por função (ton/h)
 fig.add_trace(go.Scatter(x=df["Horario"], y=df["Prod_Conferentes_ton_h"], mode="lines", name="Conferentes (ton/h)",
                          line=dict(color="#1f77b4", width=2)))
 fig.add_trace(go.Scatter(x=df["Horario"], y=df["Prod_Auxiliares_ton_h"], mode="lines", name="Auxiliares (ton/h)",
@@ -389,7 +389,7 @@ max_y = max(df[["Chegada_ton", "Acumulado_ton", "Processamento_Total_ton_h", "Pr
 min_y = -df["Saida_ton"].max() * 1.2
 
 fig.update_layout(
-    title="Logística + Produtividade (Funcionários Inteiros)",
+    title="Logística + Produtividade (Funcionários 100% Inteiros)",
     xaxis_title="Horário",
     yaxis=dict(title="Toneladas", range=[min_y, max_y]),
     barmode="relative",
@@ -413,10 +413,13 @@ col3.metric("Acumulado Final", f"{df['Acumulado_ton'].iloc[-1]:.1f} ton")
 col4.metric("Processamento Médio", f"{df['Processamento_Total_ton_h'].mean():.1f} ton/h")
 
 # =============================================
-# TABELA (com inteiros)
+# TABELA (INTEIRO FORÇADO)
 # =============================================
 with st.expander("Tabela Completa"):
     df_disp = df.copy()
+    df_disp["Conferentes"] = df_disp["Conferentes"].astype(int)
+    df_disp["Auxiliares"] = df_disp["Auxiliares"].astype(int)
+
     st.dataframe(df_disp.style.format({
         "Chegada_ton": "{:.1f}",
         "Saida_ton": "{:.1f}",
@@ -424,8 +427,13 @@ with st.expander("Tabela Completa"):
         "Processamento_Total_ton_h": "{:.1f}",
         "Prod_Conferentes_ton_h": "{:.1f}",
         "Prod_Auxiliares_ton_h": "{:.1f}",
-        "Conferentes": "{:.0f}",   # INTEIRO
-        "Auxiliares": "{:.0f}"     # INTEIRO
+        "Conferentes": "{:d}",   # INTEIRO
+        "Auxiliares": "{:d}"     # INTEIRO
     }), use_container_width=True)
-    csv = df.to_csv(index=False).encode()
+
+    # CSV com inteiros
+    csv_df = df_disp.copy()
+    csv_df["Conferentes"] = csv_df["Conferentes"].astype(int)
+    csv_df["Auxiliares"] = csv_df["Auxiliares"].astype(int)
+    csv = csv_df.to_csv(index=False).encode()
     st.download_button("Baixar CSV", csv, "logistica_inteiros.csv", "text/csv")
