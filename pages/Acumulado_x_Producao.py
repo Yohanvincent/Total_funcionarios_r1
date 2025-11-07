@@ -1,123 +1,181 @@
+# pages/Acumulado_x_Producao.py
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.graph_objects as go
+from datetime import timedelta, datetime
+import io
 
-# Configuração da página
 st.set_page_config(layout="wide")
-st.title("Capacidade x Produção Acumulada")
+st.title("Acumulado x Produção")
 
-rotulos = st.checkbox("Exibir rótulos", True)
-
-# Sidebar - Configurações
+# ======================
+# CONFIGURAÇÕES
+# ======================
 st.sidebar.header("Configurações")
-fator_dinamico = st.sidebar.number_input(
-    "Fator Dinâmico (vol/kg)",
-    min_value=0.0,
-    value=16.10,
-    step=0.1,
-    format="%.2f"
+fator_dinamico = st.sidebar.number_input("Fator Dinâmico (vol/kg)", value=16.10, step=0.1)
+tempo_descarga = st.sidebar.number_input("Tempo de descarga por pessoa (segundos)", value=30)
+densidade = 300  # 1 m³ = 300 kg
+
+# ======================
+# DADOS DE PRODUÇÃO (padrão)
+# ======================
+dados_producao = {
+    "00:00": 7.3,
+    "00:30": 8.1,
+    "01:00": 6.9,
+    "01:30": 5.8,
+    "02:00": 4.0,
+    "02:30": 6.9,
+    "03:00": 3.1,
+    "04:00": 5.0,
+    "05:00": 8.0,
+    "06:00": 10.0,
+    "07:00": 12.0,
+    "08:00": 14.0,
+    "09:00": 8.0,
+    "10:00": 6.0,
+    "11:00": 5.0,
+    "12:00": 7.0,
+    "13:00": 8.0,
+    "14:00": 9.0,
+    "15:00": 5.0,
+    "16:00": 3.0,
+    "17:00": 7.0,
+    "18:00": 9.0,
+    "19:00": 6.0,
+    "20:00": 8.0,
+    "21:00": 10.0,
+    "22:00": 5.0,
+    "23:00": 3.0,
+}
+
+df_prod = pd.DataFrame(list(dados_producao.items()), columns=["Hora", "Producao_ton"])
+df_prod["Hora"] = pd.to_datetime(df_prod["Hora"], format="%H:%M")
+
+# ======================
+# DADOS DE FUNCIONÁRIOS (padrão)
+# ======================
+dados_func = {
+    "00:00": 9,
+    "04:00": 27,
+    "06:00": 1,
+    "07:45": 1,
+    "08:00": 2,
+    "10:00": 11,
+    "12:00": 8,
+    "13:00": 5,
+    "15:45": 7,
+    "16:30": 2,
+    "18:00": 19,
+    "19:00": 5,
+    "23:00": 2,
+}
+df_func = pd.DataFrame(list(dados_func.items()), columns=["Hora", "Funcionarios"])
+df_func["Hora"] = pd.to_datetime(df_func["Hora"], format="%H:%M")
+
+# interpolar horários
+hora_inicio = pd.to_datetime("00:00", format="%H:%M")
+hora_fim = pd.to_datetime("23:59", format="%H:%M")
+intervalos = pd.date_range(hora_inicio, hora_fim, freq="15min")
+
+df_func_interp = pd.DataFrame({"Hora": intervalos})
+df_func_interp["Funcionarios"] = np.interp(
+    df_func_interp["Hora"].astype(np.int64),
+    df_func["Hora"].astype(np.int64),
+    df_func["Funcionarios"]
 )
-st.write(f"**Fator atual:** {fator_dinamico:.2f}")
 
-# Upload opcional
-uploaded_file = st.file_uploader("Carregar arquivo CSV (opcional)", type=["csv"])
+# ======================
+# CÁLCULO DE ACUMULADO
+# ======================
+df = pd.merge_asof(df_prod.sort_values("Hora"), df_func_interp.sort_values("Hora"),
+                   on="Hora", direction="nearest")
 
-if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file, sep=";", decimal=",")
-    df["Hora"] = pd.to_datetime(df["Hora"], format="%H:%M").dt.strftime("%H:%M")
-else:
-    # Dados base (sem upload)
-    dados_capacidade = {
-        "Hora": [
-            "00:00","01:00","02:00","03:00","04:00","05:00","06:00","07:00",
-            "08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00",
-            "16:00","17:00","18:00","19:00","20:00","21:00","22:00","23:00"
-        ],
-        "Capacidade_kg": [
-            552.1408578,552.1408578,552.1408578,552.1408578,953.1694808,953.1694808,
-            1456.87693,1456.87693,1408.443521,552.1408578,48.43340858,904.7360722,
-            1005.477562,1156.589797,300.2871332,300.2871332,199.5456433,300.2871332,
-            1844.344199,1995.456433,2247.310158,2247.310158,1833.688849,121.0835214
-        ],
-        "Produção (t)": [
-            7, 6, 8, 5, 9, 10, 12, 15, 16, 13, 9, 10, 11, 12, 13, 15,
-            14, 13, 17, 18, 19, 18, 16, 14
-        ]
-    }
-    df = pd.DataFrame(dados_capacidade)
+df["Capacidade_saida_ton_h"] = (df["Funcionarios"] * (3600 / tempo_descarga) *
+                                (fator_dinamico / 1000) * densidade / 1000)
 
-# Conversão para toneladas
-df["Capacidade (t)"] = (df["Capacidade_kg"] * fator_dinamico) / 1000
-df["Capacidade (t)"] = df["Capacidade (t)"].round(1)
+estoque = []
+acumulado = 0
 
-# Interpolação da capacidade — mantém valor constante até o próximo horário
-df_capacidade = pd.DataFrame({
-    "Hora": pd.date_range("00:00", "23:59", freq="15min").strftime("%H:%M")
-})
-df_capacidade = pd.merge_asof(
-    df_capacidade.sort_values("Hora").assign(Hora=pd.to_datetime(df_capacidade["Hora"], format="%H:%M")),
-    df.assign(Hora=pd.to_datetime(df["Hora"], format="%H:%M")).sort_values("Hora")[["Hora", "Capacidade (t)"]],
-    on="Hora",
-    direction="backward"
-)
-df_capacidade["Hora"] = df_capacidade["Hora"].dt.strftime("%H:%M")
+for i, row in df.iterrows():
+    acumulado += row["Producao_ton"]
+    acumulado -= row["Capacidade_saida_ton_h"] / 4  # fração (15 min = 1/4h)
+    if acumulado < 0:
+        acumulado = 0
+    estoque.append(acumulado)
 
-# Gráfico
+df["Estoque_ton"] = estoque
+
+# ======================
+# GRÁFICO
+# ======================
 fig = go.Figure()
 
-# Barras (Produção)
+# Barras - Produção pontual
 fig.add_trace(go.Bar(
-    x=df["Hora"], y=df["Produção (t)"],
-    name="Produção (t)",
-    marker_color="#90EE90", opacity=0.85
+    x=df["Hora"], y=df["Producao_ton"],
+    name="Produção (Pontual)",
+    marker_color="rgba(150,100,255,0.6)",
+    yaxis="y1"
 ))
 
-# Linha (Capacidade)
+# Linha - Estoque acumulado
 fig.add_trace(go.Scatter(
-    x=df_capacidade["Hora"], y=df_capacidade["Capacidade (t)"],
-    name="Capacidade (t)",
-    mode="lines",
-    line=dict(color="#9B59B6", width=4)
+    x=df["Hora"], y=df["Estoque_ton"],
+    mode="lines+markers",
+    name="Estoque Real (Acumulado)",
+    line=dict(color="lime", width=3),
+    fill="tozeroy",
+    yaxis="y1"
 ))
 
-# Rótulos
-if rotulos:
-    for _, r in df.iterrows():
-        fig.add_annotation(
-            x=r["Hora"], y=r["Produção (t)"],
-            text=f"{r['Produção (t)']:.1f}",
-            font=dict(color="#90EE90", size=9),
-            bgcolor="white", bordercolor="#90EE90", borderwidth=1,
-            showarrow=False, yshift=10
-        )
-        fig.add_annotation(
-            x=r["Hora"], y=r["Capacidade (t)"],
-            text=f"{r['Capacidade (t)']:.1f}",
-            font=dict(color="#9B59B6", size=9),
-            bgcolor="white", bordercolor="#9B59B6", borderwidth=1,
-            showarrow=False, yshift=0
-        )
+# Linha - Funcionários (eixo secundário)
+fig.add_trace(go.Scatter(
+    x=df["Hora"], y=df["Funcionarios"],
+    mode="lines+markers",
+    name="Total de Funcionários",
+    line=dict(color="royalblue", width=2, dash="dot"),
+    yaxis="y2"
+))
 
 # Layout
-max_y = max(df["Capacidade (t)"].max(), df["Produção (t)"].max()) * 1.1
-
 fig.update_layout(
-    xaxis_title="Hora",
-    yaxis=dict(title="Toneladas", range=[0, max_y]),
-    height=650,
+    height=600,
     hovermode="x unified",
-    legend=dict(x=0, y=1.1, orientation="h"),
-    barmode="group",
-    margin=dict(l=60, r=60, t=40, b=60),
-    plot_bgcolor="white",
+    bargap=0.05,
+    plot_bgcolor="#0f1117",
+    paper_bgcolor="#0f1117",
+    font=dict(color="white", size=13),
+    legend=dict(
+        orientation="h",
+        yanchor="bottom",
+        y=1.02,
+        xanchor="center",
+        x=0.5,
+        bgcolor="rgba(0,0,0,0)"
+    ),
+    xaxis=dict(
+        title="Horário",
+        tickformat="%H:%M",
+        showgrid=True,
+        gridcolor="rgba(255,255,255,0.1)"
+    ),
+    yaxis=dict(
+        title="Toneladas",
+        showgrid=True,
+        gridcolor="rgba(255,255,255,0.1)"
+    ),
+    yaxis2=dict(
+        title="Funcionários",
+        overlaying="y",
+        side="right",
+        showgrid=False
+    )
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
-# Dados detalhados
-with st.expander("📋 Ver dados detalhados"):
-    st.dataframe(df.style.format({
-        "Capacidade_kg": "{:,.1f}",
-        "Capacidade (t)": "{:,.1f}",
-        "Produção (t)": "{:,.1f}"
-    }))
+# Mostrar dados brutos
+with st.expander("Ver tabela de dados"):
+    st.dataframe(df)
