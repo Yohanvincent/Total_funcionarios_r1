@@ -362,87 +362,121 @@ for j in extrair_jornadas(conf_txt): aplicar_jornada(j, timeline_min)
 for j in extrair_jornadas(aux_txt):   aplicar_jornada(j, timeline_min)
 
 # =============================================
-# MONTAR DATAFRAME FINAL
+# MONTAR DATAFRAME FINAL (TUDO EM KG)
 # =============================================
+FATOR_TON_PARA_KG = 1000
+
 def floor_hour(h):
     hh = str(min_hora(h) // 60).zfill(2)
     return f"{hh}:00"
 
 df = pd.DataFrame({
     "Horario": horarios,
-    "Chegada": [round(cheg.get(h, 0), 2) for h in horarios],
-    "Saida": [round(said.get(h, 0), 2) for h in horarios],
+    "Chegada_kg": [round(cheg.get(h, 0) * FATOR_TON_PARA_KG, 0) for h in horarios],
+    "Saida_kg": [round(said.get(h, 0) * FATOR_TON_PARA_KG, 0) for h in horarios],
     "Funcionarios": func_total,
-    "Capacidade": [capacidade_hora.get(floor_hour(h), 0) for h in horarios],
+    "Capacidade_kg": [capacidade_hora.get(floor_hour(h), 0) * FATOR_TON_PARA_KG for h in horarios],
 })
 
-df["Acumulado"] = (df["Chegada"] - df["Saida"]).cumsum()
+df["Acumulado_kg"] = (df["Chegada_kg"] - df["Saida_kg"]).cumsum()
 
 # =============================================
-# GRÁFICO ÚNICO
+# GRÁFICO ÚNICO (TUDO EM KG + FUNCIONÁRIOS À DIREITA)
 # =============================================
 fig = go.Figure()
 
-# 1. Barras: Chegada e Saída
-fig.add_trace(go.Bar(x=df["Horario"], y=df["Chegada"], name="Chegada (ton)", marker_color="#2ca02c"))
-fig.add_trace(go.Bar(x=df["Horario"], y=df["Saida"], name="Saída (ton)", marker_color="#d62728"))
+# 1. Barras: Chegada e Saída (em kg)
+fig.add_trace(go.Bar(
+    x=df["Horario"], y=df["Chegada_kg"],
+    name="Chegada (kg)", marker_color="#2ca02c", opacity=0.9
+))
+fig.add_trace(go.Bar(
+    x=df["Horario"], y=df["Saida_kg"],
+    name="Saída (kg)", marker_color="#d62728", opacity=0.9
+))
 
-# 2. Capacidade (degrau hv)
+# 2. Capacidade (degrau hv em kg)
 x_step, y_step = [], []
 for i, row in df.iterrows():
-    x_step.extend([row["Horario"], row["Horario"]])
-    y_step.extend([row["Capacidade"], row["Capacidade"]])
-    if i < len(df)-1:
-        x_step.append(df.iloc[i+1]["Horario"])
-        y_step.append(row["Capacidade"])
-x_step = x_step[1:-1]  # remove duplicatas
-y_step = y_step[1:-1]
+    x_step.append(row["Horario"])
+    y_step.append(row["Capacidade_kg"])
+    if i < len(df) - 1:
+        next_h = df.iloc[i + 1]["Horario"]
+        x_step.extend([row["Horario"], next_h])
+        y_step.extend([row["Capacidade_kg"], row["Capacidade_kg"]])
 
 fig.add_trace(go.Scatter(
-    x=x_step, y=y_step, mode="lines", name="Capacidade (ton/h)",
-    line=dict(color="#9B59B6", width=4), hovertemplate="%{y:.1f} ton/h"
+    x=x_step, y=y_step,
+    mode="lines", name="Capacidade (kg/h)",
+    line=dict(color="#9B59B6", width=4),
+    hovertemplate="%{y:,.0f} kg/h"
 ))
 
-# 3. Funcionários (área)
+# 3. Acumulado no pátio (área em kg)
+fig.add_trace(go.Scatter(
+    x=df["Horario"], y=df["Acumulado_kg"],
+    mode="lines", name="Acumulado no Pátio (kg)",
+    fill="tozeroy", fillcolor="rgba(148, 103, 189, 0.3)",
+    line=dict(color="#9467bd", width=3),
+    hovertemplate="%{y:,.0f} kg"
+))
+
+# 4. Funcionários (eixo secundário)
 fig.add_trace(go.Scatter(
     x=df["Horario"], y=df["Funcionarios"],
-    mode="lines", name="Funcionários",
-    fill="tozeroy", fillcolor="rgba(30, 144, 255, 0.3)",
-    line=dict(color="#1f77b4", width=3)
+    mode="lines+markers", name="Funcionários",
+    yaxis="y2",
+    line=dict(color="#1f77b4", width=3),
+    marker=dict(size=5),
+    hovertemplate="%{y} pessoas"
 ))
 
-# 4. Acumulado no pátio (área secundária)
-fig.add_trace(go.Scatter(
-    x=df["Horario"], y=df["Acumulado"],
-    mode="lines", name="Acumulado no Pátio",
-    yaxis="y2", fill="tozeroy", fillcolor="rgba(148, 103, 189, 0.3)",
-    line=dict(color="#9467bd", width=3)
-))
-
-# Rótulos
+# =============================================
+# RÓTULOS (em kg)
+# =============================================
 if rotulos:
     for _, r in df.iterrows():
-        if r["Chegada"] > 0:
-            fig.add_annotation(x=r["Horario"], y=r["Chegada"], text=f"{r['Chegada']}", showarrow=False,
-                               font=dict(color="white", size=9), bgcolor="#2ca02c", yshift=10)
-        if r["Saida"] > 0:
-            fig.add_annotation(x=r["Horario"], y=r["Saida"], text=f"{r['Saida']}", showarrow=False,
-                               font=dict(color="white", size=9), bgcolor="#d62728", yshift=10)
+        if r["Chegada_kg"] > 0:
+            fig.add_annotation(
+                x=r["Horario"], y=r["Chegada_kg"],
+                text=f"{int(r['Chegada_kg']):,}".replace(",", "."),
+                showarrow=False, font=dict(color="white", size=9),
+                bgcolor="#2ca02c", yshift=10
+            )
+        if r["Saida_kg"] > 0:
+            fig.add_annotation(
+                x=r["Horario"], y=r["Saida_kg"],
+                text=f"{int(r['Saida_kg']):,}".replace(",", "."),
+                showarrow=False, font=dict(color="white", size=9),
+                bgcolor="#d62728", yshift=10
+            )
 
-# Layout com dois eixos Y
-max_prod = (df["Chegada"] + df["Saida"]).max() * 1.2
-max_acum = df["Acumulado"].max() * 1.2
+# =============================================
+# LAYOUT COM DOIS EIXOS
+# =============================================
+max_kg = max(df["Capacidade_kg"].max(), df["Acumulado_kg"].max(), (df["Chegada_kg"] + df["Saida_kg"]).max()) * 1.15
+max_func = df["Funcionarios"].max() * 1.3
 
 fig.update_layout(
-    title="Análise Completa: Produção, Recursos e Estoque no Pátio",
+    title="Análise Unificada: Produção, Capacidade, Estoque e Equipe (em kg)",
     xaxis_title="Horário",
-    yaxis=dict(title="Toneladas (Produção)", range=[0, max_prod]),
-    yaxis2=dict(title="Toneladas (Acumulado)", overlaying="y", side="right", range=[0, max_acum]),
+    yaxis=dict(
+        title="Quilogramas (kg)",
+        range=[0, max_kg],
+        tickformat=","
+    ),
+    yaxis2=dict(
+        title="Funcionários",
+        overlaying="y",
+        side="right",
+        range=[0, max_func]
+    ),
     barmode="stack",
     hovermode="x unified",
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     height=700,
-    margin=dict(l=60, r=80, t=80, b=60)
+    margin=dict(l=70, r=80, t=80, b=60),
+    plot_bgcolor="white"
 )
 
 st.plotly_chart(fig, use_container_width=True)
