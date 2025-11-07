@@ -2,7 +2,7 @@
 # =============================================
 # OBJETIVO: Página inicial com navegação direta para as abas
 # FUNCIONALIDADES:
-# • Três botões grandes e intuitivos
+# • Botões na ordem solicitada
 # • Redirecionamento imediato via st.switch_page()
 # • Layout centralizado e responsivo
 # =============================================
@@ -29,64 +29,54 @@ st.markdown(
 )
 
 # =============================================
-# BOTÕES DE NAVEGAÇÃO (CENTRALIZADOS)
+# BOTÕES DE NAVEGAÇÃO (CENTRALIZADOS, ORDEM CORRETA)
 # =============================================
 col1, col2, col3 = st.columns([1, 1, 1])
 
-with col1:
-    st.markdown("<br>", unsafe_allow_html=True)
-
 with col2:
-    # Botão para Auxiliar x Conferente
-    if st.button(
-        "👷👷‍♀️ Auxiliares de Carga/Descarga x Conferentes",
-        use_container_width=True,
-        key="btn_aux_vs_conf"
-    ):
-        st.switch_page("pages/05-Auxiliar_x_Conferente.py")
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # Botão para Total de Funcionários
-    if st.button(
-        "🧮 Total de Colaboradores",
-        use_container_width=True,
-        key="btn_total"
-    ):
-        st.switch_page("pages/04-Total_Funcionarios.py")
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # Botão para Acumulado x Producão
+    # 1. Acumulado x Produção
     if st.button(
         "📶 Acumulado x Produção",
         use_container_width=True,
         key="btn_acum"
     ):
         st.switch_page("pages/01-Acumulado_x_Producao.py")
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # Botão para Produção vs Equipe
-    if st.button(
-        "📶 Produção x Equipe",
-        use_container_width=True,
-        key="btn_prod"
-    ):
-        st.switch_page("pages/03-Producao_x_Equipe.py")
-
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Botão para Capacidade x Produção
+    # 2. Capacidade x Produção
     if st.button(
         "📊 Capacidade x Produção",
         use_container_width=True,
         key="btn_capac"
     ):
         st.switch_page("pages/02-Capacidade_x_Producao.py")
-
-with col3:
     st.markdown("<br>", unsafe_allow_html=True)
+
+    # 3. Produção x Equipe
+    if st.button(
+        "📶 Produção x Equipe",
+        use_container_width=True,
+        key="btn_prod"
+    ):
+        st.switch_page("pages/03-Producao_x_Equipe.py")
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # 4. Total de Colaboradores
+    if st.button(
+        "🧮 Total de Colaboradores",
+        use_container_width=True,
+        key="btn_total"
+    ):
+        st.switch_page("pages/04-Total_Funcionarios.py")
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # 5. Auxiliares de Carga/Descarga x Conferentes
+    if st.button(
+        "👷👷‍♀️ Auxiliares de Carga/Descarga x Conferentes",
+        use_container_width=True,
+        key="btn_aux_vs_conf"
+    ):
+        st.switch_page("pages/05-Auxiliar_x_Conferente.py")
 
 # =============================================
 # RODAPÉ
