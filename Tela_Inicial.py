@@ -3,17 +3,18 @@ import streamlit as st
 import streamlit_authenticator as stauth
 
 # =============================================
-# CONFIGURAÇÃO
+# CONFIGURAÇÃO (REMOVE MENU AUTOMÁTICO)
 # =============================================
 st.set_page_config(
     page_title="Disponibilidade de Equipe",
     page_icon="🚛",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="collapsed",
+    menu_items=None  # ← REMOVE MENU LATERAL
 )
 
 # =============================================
-# AUTENTICAÇÃO (CONVERTE LISTAS → DICIONÁRIO)
+# AUTENTICAÇÃO
 # =============================================
 try:
     names = st.secrets["auth"]["names"]
@@ -23,9 +24,8 @@ try:
     credentials = {"usernames": {}}
     for u, n, p in zip(usernames, names, passwords):
         credentials["usernames"][u.lower()] = {"name": n, "password": p}
-
-except Exception as e:
-    st.warning("⚠️ Modo teste: usando usuário padrão")
+except:
+    st.warning("⚠️ Modo teste")
     credentials = {
         "usernames": {
             "admin": {
@@ -48,6 +48,9 @@ authenticator = stauth.Authenticate(
 name, authentication_status, username = authenticator.login("Login", "main")
 
 if authentication_status:
+    st.success("Login realizado com sucesso!")
+    st.experimental_rerun()  # ← RECARREGA AUTOMÁTICO
+
     with st.sidebar:
         st.success(f"Olá, {name}")
         authenticator.logout("Sair", "main")
@@ -64,19 +67,15 @@ if authentication_status:
         if st.button("📶 Acumulado x Produção", use_container_width=True):
             st.switch_page("pages/01-Acumulado_x_Producao.py")
         st.markdown("<br>", unsafe_allow_html=True)
-
         if st.button("📊 Capacidade x Produção", use_container_width=True):
             st.switch_page("pages/02-Capacidade_x_Producao.py")
         st.markdown("<br>", unsafe_allow_html=True)
-
         if st.button("📶 Produção x Equipe", use_container_width=True):
             st.switch_page("pages/03-Producao_x_Equipe.py")
         st.markdown("<br>", unsafe_allow_html=True)
-
         if st.button("🧮 Total de Colaboradores", use_container_width=True):
             st.switch_page("pages/04-Total_Funcionarios.py")
         st.markdown("<br>", unsafe_allow_html=True)
-
         if st.button("👷👷‍♀️ Auxiliares de Carga/Descarga x Conferentes", use_container_width=True):
             st.switch_page("pages/05-Auxiliar_x_Conferente.py")
 
