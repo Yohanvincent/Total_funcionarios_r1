@@ -203,7 +203,7 @@ fig.add_trace(go.Bar(
 fig.add_trace(go.Scatter(
     x=df["Horario"], y=df["Equipe_Escalada"],
     mode="lines+markers", name="Equipe",
-    line=dict(color="#9B59B6", width=4),
+    line=dict(color="#9B59B6", width=4, dash="dot"),
     marker=dict(size=8),
     customdata=df["Equipe"],  # valor real
     hovertemplate="Equipe: %{customdata}<extra></extra>",  # mostra o nº real no tooltip
