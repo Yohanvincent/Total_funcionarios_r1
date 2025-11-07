@@ -1,14 +1,13 @@
-# pages/Auxiliar_x_Conferente.py
+# pages/05-Auxiliar_x_Conferente.py
 # =============================================
 # OBJETIVO: Comparar disponibilidade de Conferentes vs Auxiliares
 # LAYOUT:
-# 1. Título
-# 2. Checkbox de rótulos
-# 3. Gráfico (logo abaixo do título)
-# 4. Uploads (Conferentes + Auxiliares)
-# 5. Botão Baixar Excel
-# 6. Dados carregados (visualização)
-# 7. Explicação de formato
+# 1. Título + Checkbox
+# 2. CAMPOS PARA COLAR JORNADAS (Conferentes + Auxiliares)
+# 3. Gráfico
+# 4. Botão Baixar Excel
+# 5. Dados colados (visualização)
+# 6. Explicação de formato
 # =============================================
 import streamlit as st
 import pandas as pd
@@ -19,61 +18,64 @@ import io
 # 1. CONFIGURAÇÃO DA PÁGINA
 # =============================================
 st.set_page_config(layout="wide")
-
-# =============================================
-# 2. TÍTULO + CHECKBOX
-# =============================================
 st.title("Disponibilidade: Auxiliares Carga/Descarga x Conferentes")
 rotulos = st.checkbox("Rótulos", True)
 
 # =============================================
-# 3. PERSISTÊNCIA DE UPLOAD
+# 2. PERSISTÊNCIA DE DADOS COLADOS (session_state)
 # =============================================
-for key in ["conf_bytes", "aux_bytes", "conf_name", "aux_name"]:
-    if key not in st.session_state:
-        st.session_state[key] = None
+if "jornada_conf" not in st.session_state:
+    st.session_state.jornada_conf = ""
+if "jornada_aux" not in st.session_state:
+    st.session_state.jornada_aux = ""
 
 # =============================================
-# 4. DADOS PADRÃO
+# 3. CAMPOS PARA COLAR JORNADAS
 # =============================================
-padrao_conf = (
-    "01:00 04:00 05:05 10:23 1\n"
-    "16:00 20:00 21:05 01:24 2\n"
-    "18:30 22:30 23:30 03:38 4\n"
-    "19:00 23:00 00:05 04:09 8\n"
-    "21:00 01:00 02:05 06:08 5\n"
-    "22:00 02:00 03:05 07:03 9\n"
-    "23:30 03:30 04:35 08:49 19\n"
-    "23:50 02:40 03:45 09:11 4"
-)
+st.markdown("### Cole as jornadas (uma por linha, separadas por espaço)")
 
-padrao_aux = (
-    "16:00 20:00 21:05 01:24 5\n"
-    "18:00 22:00 23:00 03:12 1\n"
-    "19:00 22:52 12\n"
-    "19:00 23:00 00:05 04:09 13\n"
-    "19:15 23:06 1\n"
-    "21:00 01:00 02:05 06:08 29\n"
-    "21:30 01:30 02:30 06:33 1\n"
-    "22:00 02:00 03:05 07:03 20\n"
-    "23:30 03:30 04:35 08:49 25\n"
-    "23:50 02:40 03:45 09:11 1"
-)
+col_a, col_b = st.columns(2)
 
-# =============================================
-# 5. FUNÇÃO: LER ARQUIVO
-# =============================================
-def ler_bytes(bytes_data, fallback):
-    if bytes_data is None:
-        return fallback
-    try:
-        return bytes_data.decode("utf-8")
-    except:
-        df = pd.read_excel(io.BytesIO(bytes_data), header=None)
-        return "\n".join(" ".join(map(str, row)) for row in df.values)
+with col_a:
+    st.markdown("**Conferentes**")
+    jornada_conf = st.text_area(
+        "Cole aqui os dados de Conferentes",
+        value=st.session_state.jornada_conf,
+        height=280,
+        placeholder="01:00 04:00 05:05 10:23 1\n16:00 20:00 21:05 01:24 2\n...",
+        key="input_conf_page"
+    )
+    if jornada_conf != st.session_state.jornada_conf:
+        st.session_state.jornada_conf = jornada_conf
+        st.success("Conferentes atualizados!")
+
+with col_b:
+    st.markdown("**Auxiliares**")
+    jornada_aux = st.text_area(
+        "Cole aqui os dados de Auxiliares",
+        value=st.session_state.jornada_aux,
+        height=280,
+        placeholder="16:00 20:00 21:05 01:24 5\n18:00 22:00 23:00 03:12 1\n...",
+        key="input_aux_page"
+    )
+    if jornada_aux != st.session_state.jornada_aux:
+        st.session_state.jornada_aux = jornada_aux
+        st.success("Auxiliares atualizados!")
+
+st.markdown("<br>", unsafe_allow_html=True)
 
 # =============================================
-# 6. FUNÇÕES AUXILIARES
+# 4. VERIFICAR SE DADOS FORAM COLADOS
+# =============================================
+jc = st.session_state.jornada_conf.strip()
+ja = st.session_state.jornada_aux.strip()
+
+if not jc or not ja:
+    st.warning("Cole as jornadas nos campos acima para gerar o gráfico.")
+    st.stop()
+
+# =============================================
+# 5. FUNÇÕES AUXILIARES
 # =============================================
 def minutos(h):
     try:
@@ -93,12 +95,8 @@ def extrair_jornadas(texto):
     return jornadas
 
 # =============================================
-# 7. COLETAR HORÁRIOS + TIMELINE (SEM ERRO)
+# 6. COLETAR HORÁRIOS + TIMELINE
 # =============================================
-jc = ler_bytes(st.session_state.conf_bytes, padrao_conf)
-ja = ler_bytes(st.session_state.aux_bytes, padrao_aux)
-
-# 1. Coletar todos os horários únicos
 horas_set = set()
 max_min = 0
 for texto in [jc, ja]:
@@ -107,12 +105,11 @@ for texto in [jc, ja]:
         if len(p) in (3, 5):
             for h in p[:-1]:
                 m = minutos(h)
-                if m < minutos(p[0]):  # dia seguinte
+                if m < minutos(p[0]):
                     m += 1440
                 horas_set.add(h)
                 max_min = max(max_min, m)
 
-# 2. Gerar timeline completa (a cada 15 min)
 timeline_horas = []
 current = 0
 while current <= max_min + 60:
@@ -123,24 +120,20 @@ while current <= max_min + 60:
     timeline_horas.append(hora_str)
     current += 15
 
-# 3. Unir todos os horários
 todos_horarios = sorted(set(timeline_horas + list(horas_set)), key=minutos)
 
-# 4. Criar timeline ajustada com +1440 para dia seguinte
 timeline_min = []
 for h in todos_horarios:
     m = minutos(h)
-    # Se o horário é menor que o primeiro e não é 00:00, é dia seguinte
     if len(timeline_min) > 0 and m < timeline_min[0] and m >= 0:
         m += 1440
     timeline_min.append(m)
 
-# 5. Criar lista final de horários ordenada
 horarios = [h for _, h in sorted(zip(timeline_min, todos_horarios))]
 timeline_min = sorted(timeline_min)
 
 # =============================================
-# 8. CONTAGEM DE FUNCIONÁRIOS
+# 7. CONTAGEM DE FUNCIONÁRIOS
 # =============================================
 conf = [0] * len(timeline_min)
 aux = [0] * len(timeline_min)
@@ -174,7 +167,7 @@ conf = [int(x) for x in conf]
 aux = [int(x) for x in aux]
 
 # =============================================
-# 9. DATAFRAME
+# 8. DATAFRAME
 # =============================================
 df = pd.DataFrame({
     "Horario": horarios,
@@ -183,7 +176,7 @@ df = pd.DataFrame({
 })
 
 # =============================================
-# 10. GRÁFICO
+# 9. GRÁFICO
 # =============================================
 fig = go.Figure()
 
@@ -236,27 +229,7 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 # =============================================
-# 11. UPLOADS
-# =============================================
-st.markdown("**Upload (Excel/CSV/TXT) ou use padrão.**")
-c1, c2 = st.columns(2)
-with c1:
-    up_conf = st.file_uploader("Conferentes", ["txt", "csv", "xlsx"], key="conf_uploader")
-    if up_conf:
-        st.session_state.conf_bytes = up_conf.getvalue()
-        st.session_state.conf_name = up_conf.name
-    if st.session_state.conf_name:
-        st.success(f"Conferentes: **{st.session_state.conf_name}**")
-with c2:
-    up_aux = st.file_uploader("Auxiliares", ["txt", "csv", "xlsx"], key="aux_uploader")
-    if up_aux:
-        st.session_state.aux_bytes = up_aux.getvalue()
-        st.session_state.aux_name = up_aux.name
-    if st.session_state.aux_name:
-        st.success(f"Auxiliares: **{st.session_state.aux_name}**")
-
-# =============================================
-# 12. BAIXAR EXCEL
+# 10. BAIXAR EXCEL
 # =============================================
 output = io.BytesIO()
 with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -270,24 +243,21 @@ st.download_button(
 )
 
 # =============================================
-# 13. VISUALIZAÇÃO DOS DADOS
+# 11. VISUALIZAÇÃO DOS DADOS COLADOS
 # =============================================
-if st.session_state.conf_name or st.session_state.aux_name:
-    st.markdown("### Dados carregados")
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.session_state.conf_name:
-            st.markdown(f"**Conferentes: {st.session_state.conf_name}**")
-            st.code(jc, language="text")
-    with col2:
-        if st.session_state.aux_name:
-            st.markdown(f"**Auxiliares: {st.session_state.aux_name}**")
-            st.code(ja, language="text")
+st.markdown("### Dados colados")
+col1, col2 = st.columns(2)
+with col1:
+    st.markdown("**Conferentes**")
+    st.code(jc, language="text")
+with col2:
+    st.markdown("**Auxiliares**")
+    st.code(ja, language="text")
 
 # =============================================
-# 14. EXPLICAÇÃO
+# 12. EXPLICAÇÃO
 # =============================================
-with st.expander("Como preparar os arquivos"):
+with st.expander("Como preparar os dados"):
     st.markdown(
         "### Formato das linhas:\n\n"
         "| Tipo | Exemplo |\n"
@@ -298,6 +268,6 @@ with st.expander("Como preparar os arquivos"):
         "- Jornadas que cruzam meia-noite são **suportadas**\n"
         "- Quantidade no final (inteiro)\n"
         "- Separado por **espaços**\n"
-        "- **Sem cabeçalho**\n\n"
-        "> **Dica:** Copie do Excel → Bloco de Notas → Salve como `.txt`"
+        "- **Cole diretamente no campo acima**\n\n"
+        "> **Dica:** Copie do Excel → Cole aqui → Pronto!"
     )
