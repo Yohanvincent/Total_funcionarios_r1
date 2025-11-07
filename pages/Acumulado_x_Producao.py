@@ -7,8 +7,8 @@ import io
 # =============================================
 # CONFIGURAÇÃO
 # =============================================
-st.set_page_config(layout="wide", page_title="Logística + Funcionários (Cruzamento Meia-Noite)")
-st.title("Logística + Funcionários por Hora (Jornadas Cruzam Meia-Noite)")
+st.set_page_config(layout="wide", page_title="Logística + Processamento (Linha Amarela)")
+st.title("Logística + Processamento Total (Linha Amarela)")
 
 # =============================================
 # CONFIGURAÇÕES
@@ -19,7 +19,15 @@ t_carga = st.sidebar.number_input("Carga (Conferente)", value=28, min_value=1)
 
 fator_kg_vol = st.sidebar.number_input("1 vol = ? kg", value=16.10, min_value=0.1, step=0.1, format="%.2f")
 
-escala_pessoas = st.sidebar.slider("Escala visual (ton/pessoa)", 1.0, 10.0, 3.0, 0.5)
+# Produtividade por pessoa (ton/h)
+prod_descarga = (3600 / t_descarga) * fator_kg_vol / 1000  # ton/h por auxiliar
+prod_carga = (3600 / t_carga) * fator_kg_vol / 1000        # ton/h por conferente
+
+st.sidebar.markdown("### Produtividade por Pessoa")
+st.sidebar.metric("Auxiliar (descarga)", f"{prod_descarga*1000:,.0f} kg/h")
+st.sidebar.metric("Conferente (carga)", f"{prod_carga*1000:,.0f} kg/h")
+
+escala_pessoas = st.sidebar.slider("Escala visual pessoas (ton/pessoa)", 1.0, 10.0, 3.0, 0.5)
 rotulos = st.checkbox("Exibir rótulos", True)
 
 # =============================================
@@ -300,12 +308,11 @@ for txt in [conf_txt, aux_txt]:
         if len(p) >= 4:
             for h in p[:4]:
                 m = min_hora(h)
-                if m < min_hora(p[0]):  # hora final < inicial → dia seguinte
-                    m += 1440
+                if m < min_hora(p[0]): m += 1440
                 horas_set.add(h)
                 max_min = max(max_min, m)
 
-# Gerar timeline completa: 00:00 até última saída + 1h
+# Timeline completa
 timeline_min = []
 current = 0
 while current <= max_min + 60:
@@ -313,15 +320,13 @@ while current <= max_min + 60:
     hh = h // 60
     mm = h % 60
     timeline_min.append(f"{hh:02d}:{mm:02d}")
-    current += 15  # a cada 15 min (ajustável)
+    current += 15
 
-# Remover duplicatas
 horarios = sorted(set(timeline_min + list(horas_set)), key=min_hora)
-
 timeline_min_vals = [min_hora(h) + (1440 if min_hora(h) < min_hora(horarios[0]) else 0) for h in horarios]
 
 # =============================================
-# CONTAGEM DE FUNCIONÁRIOS (COM CRUZAMENTO)
+# CONTAGEM DE FUNCIONÁRIOS
 # =============================================
 conf_count = [0] * len(horarios)
 aux_count = [0] * len(horarios)
@@ -332,7 +337,6 @@ def aplicar_jornada_com_cruzamento(j, tl_vals, contador):
     si = min_hora(j.get("si", "")) if "si" in j else -1
     ri = min_hora(j.get("ri", "")) if "ri" in j else -1
 
-    # Ajustar para dia seguinte
     if sf < e: sf += 1440
     if si != -1 and si < e: si += 1440
     if ri != -1 and ri < e: ri += 1440
@@ -340,25 +344,23 @@ def aplicar_jornada_com_cruzamento(j, tl_vals, contador):
     for i, t in enumerate(tl_vals):
         t_adj = t + (1440 if t < e else 0)
         active = False
-        if si == -1:  # sem intervalo
+        if si == -1:
             active = e <= t_adj <= sf
         else:
             active = (e <= t_adj < si) or (ri <= t_adj <= sf)
         if active:
             contador[i] += j["q"]
 
-# Aplicar
 for j in extrair_jornadas(conf_txt):
     aplicar_jornada_com_cruzamento(j, timeline_min_vals, conf_count)
 for j in extrair_jornadas(aux_txt):
     aplicar_jornada_com_cruzamento(j, timeline_min_vals, aux_count)
 
-# GARANTIR INTEIRO
 conf_count = [int(x) for x in conf_count]
 aux_count = [int(x) for x in aux_count]
 
 # =============================================
-# DATAFRAME
+# DATAFRAME + PRODUTIVIDADE
 # =============================================
 df = pd.DataFrame({
     "Horario": horarios,
@@ -367,6 +369,11 @@ df = pd.DataFrame({
     "Conferentes": conf_count,
     "Auxiliares": aux_count,
 })
+
+# PRODUTIVIDADE (ton/h)
+df["Prod_Conferentes_ton_h"] = (df["Conferentes"] * prod_carga).round(1)
+df["Prod_Auxiliares_ton_h"] = (df["Auxiliares"] * prod_descarga).round(1)
+df["Processamento_Total_ton_h"] = (df["Prod_Conferentes_ton_h"] + df["Prod_Auxiliares_ton_h"]).round(1)
 
 # Acumulado
 acumulado = 0.0
@@ -377,7 +384,7 @@ for _, row in df.iterrows():
 df["Acumulado_ton"] = acumulado_list
 
 # =============================================
-# GRÁFICO
+# GRÁFICO (LINHA AMARELA DE VOLTA)
 # =============================================
 fig = go.Figure()
 
@@ -386,7 +393,12 @@ fig.add_trace(go.Bar(x=df["Horario"], y=-df["Saida_ton"], name="Saída", marker_
 fig.add_trace(go.Scatter(x=df["Horario"], y=df["Acumulado_ton"], mode="lines", name="Acumulado",
                          fill="tozeroy", fillcolor="rgba(148,103,189,0.4)", line=dict(color="#9467bd", width=3)))
 
-# PESSOAS (escala visual)
+# LINHA AMARELA (PROCESSAMENTO TOTAL)
+fig.add_trace(go.Scatter(x=df["Horario"], y=df["Processamento_Total_ton_h"], mode="lines", name="Processamento Total",
+                         line=dict(color="#ff7f0e", width=3, dash="dash"),
+                         hovertemplate="<b>%{x}</b><br>Processamento: %{y} ton/h<extra></extra>"))
+
+# PESSOAS (escaladas)
 fig.add_trace(go.Scatter(x=df["Horario"], y=df["Conferentes"] * escala_pessoas, mode="lines+markers",
                          name="Conferentes", line=dict(color="#1f77b4", width=2), marker=dict(size=5),
                          customdata=df[["Conferentes"]].values,
@@ -408,11 +420,12 @@ if rotulos:
                                text=f"-{r['Saida_ton']:.1f}", font=dict(color="white", size=9),
                                bgcolor="#d62728", showarrow=False, yshift=-8)
 
-max_y = max(df[["Chegada_ton", "Acumulado_ton"]].max().max(), df[["Conferentes", "Auxiliares"]].max().max() * escala_pessoas) * 1.2
+max_y = max(df[["Chegada_ton", "Acumulado_ton", "Processamento_Total_ton_h"]].max().max(),
+            df[["Conferentes", "Auxiliares"]].max().max() * escala_pessoas) * 1.2
 min_y = -df["Saida_ton"].max() * 1.2
 
 fig.update_layout(
-    title="Logística + Funcionários (Cruzamento Meia-Noite)",
+    title="Logística + Processamento Total (Linha Amarela)",
     xaxis_title="Horário",
     yaxis=dict(title="Toneladas", range=[min_y, max_y]),
     barmode="relative",
@@ -426,15 +439,18 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 # =============================================
-# MÉTRICAS + TABELA
+# MÉTRICAS
 # =============================================
-st.markdown("### Métricas")
+st.markdown("### Métricas Operacionais")
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Chegada Total", f"{df['Chegada_ton'].sum():.1f} ton")
 col2.metric("Saída Total", f"{df['Saida_ton'].sum():.1f} ton")
 col3.metric("Acumulado Final", f"{df['Acumulado_ton'].iloc[-1]:.1f} ton")
-col4.metric("Máx Funcionários", f"{df[['Conferentes','Auxiliares']].sum(axis=1).max()}")
+col4.metric("Processamento Médio", f"{df['Processamento_Total_ton_h'].mean():.1f} ton/h")
 
+# =============================================
+# TABELA
+# =============================================
 with st.expander("Tabela Completa"):
     df_disp = df.copy()
     df_disp["Total_Pessoas"] = df_disp["Conferentes"] + df_disp["Auxiliares"]
@@ -442,9 +458,12 @@ with st.expander("Tabela Completa"):
         "Chegada_ton": "{:.1f}",
         "Saida_ton": "{:.1f}",
         "Acumulado_ton": "{:.1f}",
+        "Processamento_Total_ton_h": "{:.1f}",
+        "Prod_Conferentes_ton_h": "{:.1f}",
+        "Prod_Auxiliares_ton_h": "{:.1f}",
         "Conferentes": "{:d}",
         "Auxiliares": "{:d}",
         "Total_Pessoas": "{:d}"
     }), use_container_width=True)
     csv = df_disp.to_csv(index=False).encode()
-    st.download_button("Baixar CSV", csv, "logistica_cruzamento.csv", "text/csv")
+    st.download_button("Baixar CSV", csv, "logistica_com_processamento.csv", "text/csv")
