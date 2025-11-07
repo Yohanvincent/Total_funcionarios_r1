@@ -1,303 +1,116 @@
-# pages/Auxiliar_x_Conferente.py
+# Tela_inicial.py
 # =============================================
-# OBJETIVO: Comparar disponibilidade de Conferentes vs Auxiliares
-# LAYOUT:
-# 1. Título
-# 2. Checkbox de rótulos
-# 3. Gráfico (logo abaixo do título)
-# 4. Uploads (Conferentes + Auxiliares)
-# 5. Botão Baixar Excel
-# 6. Dados carregados (visualização)
-# 7. Explicação de formato
+# OBJETIVO: Página inicial com navegação + campos de colagem
+# FUNCIONALIDADES:
+# • Campos para colar jornadas (Conferentes + Auxiliares)
+# • Dados persistem via session_state
+# • Botões na ordem solicitada
+# • Layout centralizado e responsivo
 # =============================================
 import streamlit as st
-import pandas as pd
-import plotly.graph_objects as go
-import io
 
 # =============================================
-# 1. CONFIGURAÇÃO DA PÁGINA
+# CONFIGURAÇÃO DA PÁGINA
 # =============================================
-st.set_page_config(layout="wide")
-
-# =============================================
-# 2. TÍTULO + CHECKBOX
-# =============================================
-st.title("Disponibilidade: Auxiliares Carga/Descarga x Conferentes")
-rotulos = st.checkbox("Rótulos", True)
-
-# =============================================
-# 3. PERSISTÊNCIA DE UPLOAD
-# =============================================
-for key in ["conf_bytes", "aux_bytes", "conf_name", "aux_name"]:
-    if key not in st.session_state:
-        st.session_state[key] = None
-
-# =============================================
-# 4. DADOS PADRÃO
-# =============================================
-padrao_conf = (
-    "01:00 04:00 05:05 10:23 1\n"
-    "16:00 20:00 21:05 01:24 2\n"
-    "18:30 22:30 23:30 03:38 4\n"
-    "19:00 23:00 00:05 04:09 8\n"
-    "21:00 01:00 02:05 06:08 5\n"
-    "22:00 02:00 03:05 07:03 9\n"
-    "23:30 03:30 04:35 08:49 19\n"
-    "23:50 02:40 03:45 09:11 4"
-)
-
-padrao_aux = (
-    "16:00 20:00 21:05 01:24 5\n"
-    "18:00 22:00 23:00 03:12 1\n"
-    "19:00 22:52 12\n"
-    "19:00 23:00 00:05 04:09 13\n"
-    "19:15 23:06 1\n"
-    "21:00 01:00 02:05 06:08 29\n"
-    "21:30 01:30 02:30 06:33 1\n"
-    "22:00 02:00 03:05 07:03 20\n"
-    "23:30 03:30 04:35 08:49 25\n"
-    "23:50 02:40 03:45 09:11 1"
+st.set_page_config(
+    page_title="Disponibilidade de Equipe",
+    layout="wide"
 )
 
 # =============================================
-# 5. FUNÇÃO: LER ARQUIVO
+# PERSISTÊNCIA DE DADOS COLADOS
 # =============================================
-def ler_bytes(bytes_data, fallback):
-    if bytes_data is None:
-        return fallback
-    try:
-        return bytes_data.decode("utf-8")
-    except:
-        df = pd.read_excel(io.BytesIO(bytes_data), header=None)
-        return "\n".join(" ".join(map(str, row)) for row in df.values)
+if "jornada_conf" not in st.session_state:
+    st.session_state.jornada_conf = ""
+if "jornada_aux" not in st.session_state:
+    st.session_state.jornada_aux = ""
 
 # =============================================
-# 6. FUNÇÕES AUXILIARES
+# TÍTULO CENTRALIZADO
 # =============================================
-def minutos(h):
-    try:
-        hh, mm = map(int, h.split(":"))
-        return hh * 60 + mm
-    except:
-        return 0
-
-def extrair_jornadas(texto):
-    jornadas = []
-    for linha in texto.strip().split("\n"):
-        p = linha.strip().split()
-        if len(p) == 5 and p[4].isdigit():
-            jornadas.append({"tipo": "c", "e": p[0], "si": p[1], "ri": p[2], "sf": p[3], "q": int(p[4])})
-        elif len(p) == 3 and p[2].isdigit():
-            jornadas.append({"tipo": "m", "e": p[0], "sf": p[1], "q": int(p[2])})
-    return jornadas
-
-# =============================================
-# 7. COLETAR HORÁRIOS + TIMELINE (SEM ERRO)
-# =============================================
-jc = ler_bytes(st.session_state.conf_bytes, padrao_conf)
-ja = ler_bytes(st.session_state.aux_bytes, padrao_aux)
-
-# 1. Coletar todos os horários únicos
-horas_set = set()
-max_min = 0
-for texto in [jc, ja]:
-    for linha in texto.strip().split("\n"):
-        p = linha.strip().split()
-        if len(p) in (3, 5):
-            for h in p[:-1]:
-                m = minutos(h)
-                if m < minutos(p[0]):  # dia seguinte
-                    m += 1440
-                horas_set.add(h)
-                max_min = max(max_min, m)
-
-# 2. Gerar timeline completa (a cada 15 min)
-timeline_horas = []
-current = 0
-while current <= max_min + 60:
-    total_min = current % 1440
-    hh = total_min // 60
-    mm = total_min % 60
-    hora_str = f"{hh:02d}:{mm:02d}"
-    timeline_horas.append(hora_str)
-    current += 15
-
-# 3. Unir todos os horários
-todos_horarios = sorted(set(timeline_horas + list(horas_set)), key=minutos)
-
-# 4. Criar timeline ajustada com +1440 para dia seguinte
-timeline_min = []
-for h in todos_horarios:
-    m = minutos(h)
-    # Se o horário é menor que o primeiro e não é 00:00, é dia seguinte
-    if len(timeline_min) > 0 and m < timeline_min[0] and m >= 0:
-        m += 1440
-    timeline_min.append(m)
-
-# 5. Criar lista final de horários ordenada
-horarios = [h for _, h in sorted(zip(timeline_min, todos_horarios))]
-timeline_min = sorted(timeline_min)
-
-# =============================================
-# 8. CONTAGEM DE FUNCIONÁRIOS
-# =============================================
-conf = [0] * len(timeline_min)
-aux = [0] * len(timeline_min)
-
-def aplicar_jornada_com_cruzamento(j, tl_vals, contador):
-    e = minutos(j["e"])
-    sf = minutos(j.get("sf", j.get("si", "")))
-    si = minutos(j.get("si", "")) if "si" in j else -1
-    ri = minutos(j.get("ri", "")) if "ri" in j else -1
-
-    if sf < e: sf += 1440
-    if si != -1 and si < e: si += 1440
-    if ri != -1 and ri < e: ri += 1440
-
-    for i, t in enumerate(tl_vals):
-        t_adj = t + (1440 if t < e else 0)
-        active = False
-        if si == -1:
-            active = e <= t_adj <= sf
-        else:
-            active = (e <= t_adj < si) or (ri <= t_adj <= sf)
-        if active:
-            contador[i] += j["q"]
-
-for j in extrair_jornadas(jc):
-    aplicar_jornada_com_cruzamento(j, timeline_min, conf)
-for j in extrair_jornadas(ja):
-    aplicar_jornada_com_cruzamento(j, timeline_min, aux)
-
-conf = [int(x) for x in conf]
-aux = [int(x) for x in aux]
-
-# =============================================
-# 9. DATAFRAME
-# =============================================
-df = pd.DataFrame({
-    "Horario": horarios,
-    "Conferentes": conf,
-    "Auxiliares": aux
-})
-
-# =============================================
-# 10. GRÁFICO
-# =============================================
-fig = go.Figure()
-
-fig.add_trace(go.Scatter(
-    x=df["Horario"], y=df["Conferentes"],
-    mode="lines+markers", name="Conferentes",
-    line=dict(color="#90EE90", width=4), marker=dict(size=6),
-    fill="tozeroy", fillcolor="rgba(144, 238, 144, 0.3)"
-))
-fig.add_trace(go.Scatter(
-    x=df["Horario"], y=df["Auxiliares"],
-    mode="lines+markers", name="Auxiliares",
-    line=dict(color="#228B22", width=4), marker=dict(size=6),
-    fill="tozeroy", fillcolor="rgba(34, 139, 34, 0.3)"
-))
-
-if "09:30" in df["Horario"].values and "10:30" in df["Horario"].values:
-    fig.add_vrect(x0="09:30", x1="10:30", fillcolor="gray", opacity=0.1, layer="below")
-
-if rotulos:
-    for _, r in df.iterrows():
-        if r["Conferentes"] > 0:
-            fig.add_annotation(
-                x=r["Horario"], y=r["Conferentes"] + 0.8,
-                text=f"<b>{r['Conferentes']}</b>",
-                showarrow=False,
-                font=dict(color="#90EE90", size=10),
-                bgcolor="white", bordercolor="#90EE90", borderwidth=1, borderpad=4
-            )
-        if r["Auxiliares"] > 0:
-            fig.add_annotation(
-                x=r["Horario"], y=r["Auxiliares"] + 0.8,
-                text=f"<b>{r['Auxiliares']}</b>",
-                showarrow=False,
-                font=dict(color="#228B22", size=10),
-                bgcolor="white", bordercolor="#228B22", borderwidth=1, borderpad=4
-            )
-
-fig.update_layout(
-    title="",
-    xaxis_title="Horário",
-    yaxis_title="Pessoas",
-    height=600,
-    hovermode="x unified",
-    margin=dict(l=40, r=40, t=20, b=40),
-    legend=dict(x=0, y=1),
-    plot_bgcolor="white"
-)
-
-st.plotly_chart(fig, use_container_width=True)
-
-# =============================================
-# 11. UPLOADS
-# =============================================
-st.markdown("**Upload (Excel/CSV/TXT) ou use padrão.**")
-c1, c2 = st.columns(2)
-with c1:
-    up_conf = st.file_uploader("Conferentes", ["txt", "csv", "xlsx"], key="conf_uploader")
-    if up_conf:
-        st.session_state.conf_bytes = up_conf.getvalue()
-        st.session_state.conf_name = up_conf.name
-    if st.session_state.conf_name:
-        st.success(f"Conferentes: **{st.session_state.conf_name}**")
-with c2:
-    up_aux = st.file_uploader("Auxiliares", ["txt", "csv", "xlsx"], key="aux_uploader")
-    if up_aux:
-        st.session_state.aux_bytes = up_aux.getvalue()
-        st.session_state.aux_name = up_aux.name
-    if st.session_state.aux_name:
-        st.success(f"Auxiliares: **{st.session_state.aux_name}**")
-
-# =============================================
-# 12. BAIXAR EXCEL
-# =============================================
-output = io.BytesIO()
-with pd.ExcelWriter(output, engine="openpyxl") as writer:
-    df.to_excel(writer, index=False)
-output.seek(0)
-st.download_button(
-    "Baixar Excel",
-    output,
-    "equipe_disponibilidade.xlsx",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+st.markdown(
+    """
+    <h1 style='text-align: center; margin-bottom: 40px;'>
+        Dados Operacionais (Capacidade / Produtividade)
+    </h1>
+    """,
+    unsafe_allow_html=True
 )
 
 # =============================================
-# 13. VISUALIZAÇÃO DOS DADOS
+# CAMPOS PARA COLAR JORNADAS
 # =============================================
-if st.session_state.conf_name or st.session_state.aux_name:
-    st.markdown("### Dados carregados")
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.session_state.conf_name:
-            st.markdown(f"**Conferentes: {st.session_state.conf_name}**")
-            st.code(jc, language="text")
-    with col2:
-        if st.session_state.aux_name:
-            st.markdown(f"**Auxiliares: {st.session_state.aux_name}**")
-            st.code(ja, language="text")
+st.markdown("### Cole as jornadas (uma por linha, separadas por espaço)")
 
-# =============================================
-# 14. EXPLICAÇÃO
-# =============================================
-with st.expander("Como preparar os arquivos"):
-    st.markdown(
-        "### Formato das linhas:\n\n"
-        "| Tipo | Exemplo |\n"
-        "|------|---------|\n"
-        "| Completa | `23:30 03:30 04:35 08:49 19` |\n"
-        "| Meia | `19:00 22:52 12` |\n\n"
-        "- Horário: `HH:MM` (24h)\n"
-        "- Jornadas que cruzam meia-noite são **suportadas**\n"
-        "- Quantidade no final (inteiro)\n"
-        "- Separado por **espaços**\n"
-        "- **Sem cabeçalho**\n\n"
-        "> **Dica:** Copie do Excel → Bloco de Notas → Salve como `.txt`"
+col_a, col_b = st.columns(2)
+
+with col_a:
+    st.markdown("**Conferentes**")
+    jornada_conf = st.text_area(
+        "Cole aqui os dados de Conferentes",
+        value=st.session_state.jornada_conf,
+        height=300,
+        placeholder="01:00 04:00 05:05 10:23 1\n16:00 20:00 21:05 01:24 2\n...",
+        key="input_conf"
     )
+    if jornada_conf != st.session_state.jornada_conf:
+        st.session_state.jornada_conf = jornada_conf
+        st.success("Conferentes atualizados!")
+
+with col_b:
+    st.markdown("**Auxiliares**")
+    jornada_aux = st.text_area(
+        "Cole aqui os dados de Auxiliares",
+        value=st.session_state.jornada_aux,
+        height=300,
+        placeholder="16:00 20:00 21:05 01:24 5\n18:00 22:00 23:00 03:12 1\n...",
+        key="input_aux"
+    )
+    if jornada_aux != st.session_state.jornada_aux:
+        st.session_state.jornada_aux = jornada_aux
+        st.success("Auxiliares atualizados!")
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+# =============================================
+# BOTÕES DE NAVEGAÇÃO (CENTRALIZADOS, ORDEM CORRETA)
+# =============================================
+col1, col2, col3 = st.columns([1, 1, 1])
+
+with col2:
+    # 1. Acumulado x Produção
+    if st.button("📶 Acumulado x Produção", use_container_width=True, key="btn_acum"):
+        st.switch_page("pages/01-Acumulado_x_Producao.py")
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # 2. Capacidade x Produção
+    if st.button("📊 Capacidade x Produção", use_container_width=True, key="btn_capac"):
+        st.switch_page("pages/02-Capacidade_x_Producao.py")
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # 3. Produção x Equipe
+    if st.button("📶 Produção x Equipe", use_container_width=True, key="btn_prod"):
+        st.switch_page("pages/03-Producao_x_Equipe.py")
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # 4. Total de Colaboradores
+    if st.button("🧮 Total de Colaboradores", use_container_width=True, key="btn_total"):
+        st.switch_page("pages/04-Total_Funcionarios.py")
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # 5. Auxiliares x Conferentes
+    if st.button("👷👷‍♀️ Auxiliares x Conferentes", use_container_width=True, key="btn_aux_vs_conf"):
+        st.switch_page("pages/05-Auxiliar_x_Conferente.py")
+
+# =============================================
+# RODAPÉ
+# =============================================
+st.markdown(
+    """
+    <hr style='margin-top: 60px;'>
+    <p style='text-align: center; color: gray; font-size: 0.9em;'>
+        Cole os dados → Clique em um botão → Veja os gráficos em tempo real.
+    </p>
+    """,
+    unsafe_allow_html=True
+)
