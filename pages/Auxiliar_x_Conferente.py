@@ -24,7 +24,7 @@ st.set_page_config(layout="wide")
 # =============================================
 # 2. TÍTULO + CHECKBOX + GRÁFICO (NO INÍCIO)
 # =============================================
-st.title("Disponibilidade: Auxiliares Carga/Descarga x Conferentes")
+st.title("👷Disponibilidade: Auxiliares Carga/Descarga x Conferentes")
 
 # Checkbox de rótulos (logo abaixo do título)
 rotulos = st.checkbox("Rótulos", True)
