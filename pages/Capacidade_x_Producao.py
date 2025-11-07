@@ -21,7 +21,7 @@ fator_dinamico = st.sidebar.number_input(
 st.write(f"**Fator atual:** {fator_dinamico:.2f}")
 
 # ------------------------
-# Dados padrão de produção (usados quando não houver upload)
+# Dados padrão de produção
 # ------------------------
 padrao_producao = """Cheg. Ton.
 01:00 7,278041
@@ -72,7 +72,7 @@ Saida Ton.
 """
 
 # ------------------------
-# Funções de leitura/parsing (mesma lógica do seu outro arquivo)
+# Funções de leitura/parsing
 # ------------------------
 def ler_producao_texto(b, f):
     if b is None:
@@ -83,17 +83,14 @@ def ler_producao_texto(b, f):
         df = pd.read_excel(io.BytesIO(b), header=None)
         return "\n".join(" ".join(map(str, r)) for r in df.values)
 
-
 def extrair_producao(texto):
     cheg = {}
     said = {}
     modo = None
     for l in texto.strip().split("\n"):
         l = l.strip()
-        if l == "Cheg. Ton.":
-            modo = "cheg"; continue
-        if l == "Saida Ton.":
-            modo = "said"; continue
+        if l == "Cheg. Ton.": modo = "cheg"; continue
+        if l == "Saida Ton.": modo = "said"; continue
         if not l or modo is None: continue
         p = l.split()
         if len(p) < 2: continue
@@ -109,7 +106,7 @@ def extrair_producao(texto):
     return cheg, said
 
 # ------------------------
-# Dados de capacidade (padrão)
+# Dados de capacidade
 # ------------------------
 dados_capacidade = {
     "Hora": [
@@ -125,15 +122,15 @@ dados_capacidade = {
     ]
 }
 df_cap = pd.DataFrame(dados_capacidade)
-# criar dict para lookup rápido (hora cheia string -> capacidade em toneladas)
+
+# dict hora cheia -> toneladas
 cap_dict_t = {}
 for h, kg in zip(df_cap["Hora"], df_cap["Capacidade_kg"]):
-    # capacidade ajustada (kg * fator) convertida para toneladas
     cap_t = (kg * fator_dinamico) / 1000.0
     cap_dict_t[h] = round(cap_t, 1)
 
 # ------------------------
-# Produção: usa session_state ou padrão (igual aos outros)
+# Produção (session ou padrão)
 # ------------------------
 if "prod_bytes" not in st.session_state:
     st.session_state.prod_bytes = None
@@ -141,7 +138,7 @@ texto_producao = ler_producao_texto(st.session_state.prod_bytes, padrao_producao
 cheg, said = extrair_producao(texto_producao)
 
 # ------------------------
-# Montar eixo X unificado (horas da capacidade + horas reais da produção)
+# Eixo X unificado
 # ------------------------
 def min_hora(h):
     try:
@@ -150,27 +147,20 @@ def min_hora(h):
     except:
         return 0
 
-# coletar horas únicas
-horas_unicas = set()
-# adicionar horas de capacidade (cheia)
-horas_unicas.update(df_cap["Hora"].tolist())
-# adicionar horas da produção (chegadas e saidas)
+horas_unicas = set(df_cap["Hora"].tolist())
 horas_unicas.update(cheg.keys())
 horas_unicas.update(said.keys())
 
-# normalizar todos os tempos para formato "HH:MM" strings
 def normaliza(h):
     if isinstance(h, pd.Timestamp):
         return h.strftime("%H:%M")
     return h
 
-horas_unicas_str = set(normaliza(h) for h in horas_unicas)
-# ordenar por minutos
-horarios = sorted(list(horas_unicas_str), key=min_hora)
+horas_unicas_str = {normaliza(h) for h in horas_unicas}
+horarios = sorted(horas_unicas_str, key=min_hora)
 
 # ------------------------
-# Para cada horário unificado, pegar produção e capacidade correspondente
-# capacidade em um horário t = capacidade do hour_floor (ex: 01:15 -> 01:00)
+# Valores por horário
 # ------------------------
 def hour_floor(h):
     mm = min_hora(h)
@@ -186,7 +176,6 @@ for h in horarios:
     hf = hour_floor(h)
     cap_vals.append(cap_dict_t.get(hf, 0.0))
 
-# Cria DataFrame final para exibição
 df_final = pd.DataFrame({
     "Horario": horarios,
     "Chegada_Ton": prod_cheg_vals,
@@ -195,25 +184,27 @@ df_final = pd.DataFrame({
 })
 
 # ------------------------
-# Plotly: barras empilhadas (Chegada / Saida) + linha de capacidade (degraus)
+# Plotly
 # ------------------------
 fig = go.Figure()
 
+# Barras
 fig.add_trace(go.Bar(
     x=df_final["Horario"], y=df_final["Chegada_Ton"],
     name="Chegada (ton)", marker_color="#90EE90", opacity=0.85
 ))
-
 fig.add_trace(go.Bar(
     x=df_final["Horario"], y=df_final["Saida_Ton"],
     name="Saida (ton)", marker_color="#E74C3C", opacity=0.85
 ))
 
-# --- LINHA DE CAPACIDADE: TRACEJADA + DEGRAU (hv) --- 
-# Garante que não há trace antiga
+# -------------------------------------------------
+# LINHA DE CAPACIDADE: TRACEJADA + DEGRAU (hv)
+# -------------------------------------------------
+# Remove qualquer trace antiga com mesmo nome
 fig.data = [t for t in fig.data if t.name != "Capacidade (t)"]
 
-# Cria arrays para degrau hv (horizontal até próximo ponto)
+# Constrói degrau hv
 x_step = []
 y_step = []
 for i in range(len(df_final)):
@@ -224,45 +215,20 @@ for i in range(len(df_final)):
     if i < len(df_final) - 1:
         next_h = df_final["Horario"].iloc[i + 1]
         x_step.append(next_h)
-        y_step.append(cap)  # mantém horizontal
+        y_step.append(cap)  # horizontal
 
-# Trace ÚNICA: tracejada, grossa, roxa, degrau
+# Trace única: tracejada
 fig.add_trace(go.Scatter(
     x=x_step,
     y=y_step,
     name="Capacidade (t)",
     mode="lines",
-    line=dict(color="#9B59B6", width=4, dash="dash"),  # ← TRACEJADA AQUI
-    hovertemplate="Capacidade: %{y:.1f} t<br>Horário: %{x}<extra></extra>",
-    fill=None,
+    line=dict(color="#9B59B6", width=4, dash="dash"),   # <--- TRACEJADA
+    hovertemplate="Capacidade: %{y:.1f} t<extra></extra>",
     connectgaps=False
 ))
 
-# Ajustar shape para degrau horizontal-vertical
-# plotly tem 'line.shape' no dict da trace; para barras + degrau usamos uma segunda scatter com duplicated x for step
-# melhor: construir x_step e y_step para 'hv' visual manual
-x_step = []
-y_step = []
-for i, h in enumerate(df_final["Horario"]):
-    x_step.append(h)
-    y_step.append(df_final["Capacidade (t)"].iloc[i])
-    # lookahead: se tiver próximo, repeat current x to create vertical step when plotly draws with 'lines'
-    if i + 1 < len(df_final):
-        x_step.append(df_final["Horario"].iloc[i+1])
-        y_step.append(df_final["Capacidade (t)"].iloc[i])
-
-# remover a scatter anterior e adicionar a de steps
-fig.data = fig.data[:-1]  # remove última trace adicionada
-fig.add_trace(go.Scatter(
-    x=x_step,
-    y=y_step,
-    name="Capacidade (t)",
-    mode="lines",
-    line=dict(color="#9B59B6", width=4),
-    hovertemplate="Capacidade: %{y:.1f} t<extra></extra>"
-))
-
-# Rótulos (opcional) — escrevo apenas nos horários da produção (para não poluir)
+# Rótulos (opcional)
 if rotulos:
     for _, r in df_final.iterrows():
         if r["Chegada_Ton"] > 0:
@@ -275,17 +241,16 @@ if rotulos:
                 text=f"{r['Saida_Ton']:.1f}", font=dict(color="#E74C3C", size=9),
                 bgcolor="white", bordercolor="#E74C3C", borderwidth=1,
                 showarrow=False, yshift=10)
-    # rótulos da capacidade só nas horas cheias (evita repetição)
-    for h in df_cap["Hora"].tolist():
-        hstr = h  # já em "HH:MM"
-        val = cap_dict_t.get(hstr, 0.0)
-        fig.add_annotation(x=hstr, y=val,
+    for h in df_cap["Hora"]:
+        val = cap_dict_t.get(h, 0.0)
+        fig.add_annotation(x=h, y=val,
             text=f"{val:.1f}", font=dict(color="#9B59B6", size=9),
             bgcolor="white", bordercolor="#9B59B6", borderwidth=1,
             showarrow=False, yshift=0)
 
 # Layout
-max_y = max(df_final["Capacidade (t)"].max(), df_final["Chegada_Ton"].max() + df_final["Saida_Ton"].max()) * 1.15
+max_y = max(df_final["Capacidade (t)"].max(),
+            df_final["Chegada_Ton"].max() + df_final["Saida_Ton"].max()) * 1.15
 fig.update_layout(
     xaxis_title="Horario",
     yaxis=dict(title="Toneladas", range=[0, max_y]),
@@ -299,7 +264,7 @@ fig.update_layout(
 
 st.plotly_chart(fig, use_container_width=True)
 
-# Exibir dados
+# Dados
 with st.expander("📋 Dados consolidados"):
     st.dataframe(df_final.style.format({
         "Chegada_Ton": "{:,.1f}",
