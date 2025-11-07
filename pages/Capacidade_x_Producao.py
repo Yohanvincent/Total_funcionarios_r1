@@ -215,7 +215,7 @@ fig.add_trace(go.Scatter(
     x=df_final["Horario"], y=df_final["Capacidade (t)"],
     name="Capacidade (t)",
     mode="lines",
-    line=dict(color="#9B59B6", width=4),
+    line=dict(color="#9B59B6", width=4, dash="dash"),
     hovertemplate="Capacidade: %{y:.1f} t<extra></extra>",
     connectgaps=True
 ))
