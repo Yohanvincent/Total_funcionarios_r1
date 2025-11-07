@@ -22,7 +22,7 @@ st.set_page_config(
 st.markdown(
     """
     <h1 style='text-align: center; margin-bottom: 50px;'>
-        Excelência Operacional - Dados (Capacidade / Produtividade)
+        Dados Operacionais (Capacidade / Produtividade)
     </h1>
     """,
     unsafe_allow_html=True
