@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import io
 
 st.set_page_config(layout="wide")
-st.title("Capacidade x Produção")
+st.title("📈 Capacidade x Produção")
 
 rotulos = st.checkbox("Exibir rótulos", True)
 
