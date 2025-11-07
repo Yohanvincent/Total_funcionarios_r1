@@ -13,15 +13,15 @@ st.set_page_config(
 )
 
 # =============================================
-# AUTENTICAÇÃO (OBRIGATÓRIO secrets.toml)
+# AUTENTICAÇÃO (compatível com versão 0.3.0+)
 # =============================================
 try:
     authenticator = stauth.Authenticate(
-        st.secrets["auth"]["names"],
-        st.secrets["auth"]["usernames"],
-        st.secrets["auth"]["passwords"],
-        "logistica_dashboard",
-        "chave_muito_forte_123456789",
+        st.secrets["auth"].names,
+        st.secrets["auth"].usernames,
+        st.secrets["auth"].passwords,
+        cookie_name="logistica_dashboard",
+        key="chave_muito_forte_123456789",
         cookie_expiry_days=7
     )
 except KeyError:
@@ -35,7 +35,7 @@ passwords = ["$2b$12$5uQ2z7W3k8Y9p0r1t2v3w4x6y7z8A9B0C1D2E3F4G5H6I7J8K9L0M"]
     """)
     st.stop()
 except Exception as e:
-    st.error(f"Erro inesperado: {e}")
+    st.error(f"Erro: {e}")
     st.stop()
 
 # =============================================
@@ -91,9 +91,6 @@ if authentication_status:
         unsafe_allow_html=True
     )
 
-# =============================================
-# ERROS
-# =============================================
 elif authentication_status == False:
     st.error("Usuário ou senha incorretos")
 elif authentication_status is None:
