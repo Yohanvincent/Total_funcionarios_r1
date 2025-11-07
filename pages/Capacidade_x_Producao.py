@@ -209,11 +209,11 @@ fig.add_trace(go.Bar(
     name="Saida (ton)", marker_color="#E74C3C", opacity=0.85
 ))
 
-# --- LINHA DE CAPACIDADE TRACEJADA EM DEGRAU (hv) ---
-# Remove qualquer trace anterior com o mesmo nome (evita sobreposição)
+# --- LINHA DE CAPACIDADE: TRACEJADA + DEGRAU (hv) --- 
+# Garante que não há trace antiga
 fig.data = [t for t in fig.data if t.name != "Capacidade (t)"]
 
-# Constrói os arrays para degrau "hv" (horizontal → vertical)
+# Cria arrays para degrau hv (horizontal até próximo ponto)
 x_step = []
 y_step = []
 for i in range(len(df_final)):
@@ -221,21 +221,21 @@ for i in range(len(df_final)):
     cap = df_final["Capacidade (t)"].iloc[i]
     x_step.append(h)
     y_step.append(cap)
-    # Degrau: mantém o valor atual até o próximo horário
     if i < len(df_final) - 1:
         next_h = df_final["Horario"].iloc[i + 1]
         x_step.append(next_h)
-        y_step.append(cap)
+        y_step.append(cap)  # mantém horizontal
 
-# Trace única: tracejada + degrau
+# Trace ÚNICA: tracejada, grossa, roxa, degrau
 fig.add_trace(go.Scatter(
     x=x_step,
     y=y_step,
     name="Capacidade (t)",
     mode="lines",
-    line=dict(color="#9B59B6", width=4, dash="dash"),  # ← TRACEJADA
-    hovertemplate="Capacidade: %{y:.1f} t<extra></extra>",
-    connectgaps=False  # Essencial para o dash funcionar em degraus
+    line=dict(color="#9B59B6", width=4, dash="dash"),  # ← TRACEJADA AQUI
+    hovertemplate="Capacidade: %{y:.1f} t<br>Horário: %{x}<extra></extra>",
+    fill=None,
+    connectgaps=False
 ))
 
 # Ajustar shape para degrau horizontal-vertical
