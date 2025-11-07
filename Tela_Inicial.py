@@ -3,14 +3,14 @@ import streamlit as st
 import streamlit_authenticator as stauth
 
 # =============================================
-# CONFIGURAÇÃO (REMOVE MENU AUTOMÁTICO)
+# CONFIGURAÇÃO
 # =============================================
 st.set_page_config(
     page_title="Disponibilidade de Equipe",
     page_icon="🚛",
     layout="wide",
     initial_sidebar_state="collapsed",
-    menu_items=None  # ← REMOVE MENU LATERAL
+    menu_items=None
 )
 
 # =============================================
@@ -47,14 +47,15 @@ authenticator = stauth.Authenticate(
 # =============================================
 name, authentication_status, username = authenticator.login("Login", "main")
 
+# =============================================
+# LOGIN BEM-SUCEDIDO
+# =============================================
 if authentication_status:
-    st.success("Login realizado com sucesso!")
-    st.experimental_rerun()  # ← RECARREGA AUTOMÁTICO
-
     with st.sidebar:
         st.success(f"Olá, {name}")
         authenticator.logout("Sair", "main")
 
+    # === MOSTRA OS BOTÕES PRIMEIRO ===
     st.markdown(
         "<h1 style='text-align: center; margin-bottom: 50px;'>"
         "Dados Operacionais (Capacidade / Produtividade)"
@@ -67,15 +68,19 @@ if authentication_status:
         if st.button("📶 Acumulado x Produção", use_container_width=True):
             st.switch_page("pages/01-Acumulado_x_Producao.py")
         st.markdown("<br>", unsafe_allow_html=True)
+
         if st.button("📊 Capacidade x Produção", use_container_width=True):
             st.switch_page("pages/02-Capacidade_x_Producao.py")
         st.markdown("<br>", unsafe_allow_html=True)
+
         if st.button("📶 Produção x Equipe", use_container_width=True):
             st.switch_page("pages/03-Producao_x_Equipe.py")
         st.markdown("<br>", unsafe_allow_html=True)
+
         if st.button("🧮 Total de Colaboradores", use_container_width=True):
             st.switch_page("pages/04-Total_Funcionarios.py")
         st.markdown("<br>", unsafe_allow_html=True)
+
         if st.button("👷👷‍♀️ Auxiliares de Carga/Descarga x Conferentes", use_container_width=True):
             st.switch_page("pages/05-Auxiliar_x_Conferente.py")
 
@@ -87,6 +92,15 @@ if authentication_status:
         unsafe_allow_html=True
     )
 
+    # === SÓ RECARREGA SE FOR O PRIMEIRO LOGIN (EVITA LOOP) ===
+    if not st.session_state.get("logged_in", False):
+        st.session_state.logged_in = True
+        st.success("Login realizado com sucesso!")
+        st.experimental_rerun()
+
+# =============================================
+# LOGIN FALHOU
+# =============================================
 elif authentication_status == False:
     st.error("Usuário ou senha incorretos")
 elif authentication_status is None:
