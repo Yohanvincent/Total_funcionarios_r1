@@ -13,6 +13,12 @@ st.title("📦 Capacidade × Produção × Acumulado × Funcionários (toneladas
 rotulos = st.checkbox("Exibir rótulos", True)
 
 # -------------------------------------------------
+# PARÂMETROS (agora fixo no código)
+# -------------------------------------------------
+FATOR_KG_POR_VOL = 16.1   # kg por volume
+TON_PARA_KG = 1000
+
+# -------------------------------------------------
 # SESSION STATE – persistência dos uploads
 # -------------------------------------------------
 keys = [
@@ -326,12 +332,12 @@ cap_txt      = ler_bytes(st.session_state.capacidade_bytes, padrao_capacidade)
 
 cheg = extrair_movimentos(chegadas_txt)
 said = extrair_movimentos(saidas_txt)
-capacidade_hora = extrair_capacidade(cap_txt)
+capacidade_vol = extrair_capacidade(cap_txt)  # em volumes
 
 # -------------------------------------------------
 # TODAS AS HORAS ÚNICAS
 # -------------------------------------------------
-horas_set = set(cheg.keys()) | set(said.keys()) | set(capacidade_hora.keys())
+horas_set = set(cheg.keys()) | set(said.keys()) | set(capacidade_vol.keys())
 for txt in [conf_txt, aux_txt]:
     for linha in txt.splitlines():
         p = linha.split()
@@ -365,23 +371,27 @@ for j in extrair_jornadas(aux_txt):
     aplicar_jornada(j, timeline_min)
 
 # -------------------------------------------------
-# DATAFRAME FINAL – tudo em toneladas
+# DATAFRAME FINAL – tudo em TONELADAS
 # -------------------------------------------------
 df = pd.DataFrame({
     "Horario": horarios,
     "Chegada_ton":   [round(cheg.get(h, 0), 1) for h in horarios],
     "Saida_ton":     [round(said.get(h, 0), 1) for h in horarios],
     "Funcionarios":  func_total,
-    "Capacidade_ton":[round(capacidade_hora.get(floor_hour(h), 0), 3) for h in horarios],
 })
+
+# Capacidade: volume × 1000 × 16.1 kg/vol → toneladas
+capacidade_kg = [capacidade_vol.get(floor_hour(h), 0) * TON_PARA_KG * FATOR_KG_POR_VOL for h in horarios]
+df["Capacidade_ton"] = [round(kg / TON_PARA_KG, 1) for kg in capacidade_kg]  # em toneladas
+
 df["Acumulado_ton"] = (df["Chegada_ton"] - df["Saida_ton"]).cumsum().round(1)
 
 # -------------------------------------------------
-# GRÁFICO – MESMO EIXO Y (toneladas + funcionários)
+# GRÁFICO – MESMO EIXO Y
 # -------------------------------------------------
 fig = go.Figure()
 
-# 1. Barras empilhadas (chegada + saída)
+# 1. Barras empilhadas
 fig.add_trace(go.Bar(
     x=df["Horario"], y=df["Chegada_ton"],
     name="Chegada (ton)", marker_color="#2ca02c", opacity=0.85
@@ -403,7 +413,7 @@ fig.add_trace(go.Scatter(
     x=x_step, y=y_step,
     mode="lines", name="Capacidade (ton)",
     line=dict(color="#9B59B6", width=4),
-    hovertemplate="%{y:.3f} ton"
+    hovertemplate="%{y:.1f} ton"
 ))
 
 # 3. Acumulado (área)
@@ -415,7 +425,7 @@ fig.add_trace(go.Scatter(
     hovertemplate="%{y:.1f} ton"
 ))
 
-# 4. Funcionários (linha fina – mesmo eixo)
+# 4. Funcionários (linha pontilhada)
 fig.add_trace(go.Scatter(
     x=df["Horario"], y=df["Funcionarios"],
     mode="lines+markers", name="Funcionários",
@@ -425,7 +435,7 @@ fig.add_trace(go.Scatter(
 ))
 
 # -------------------------------------------------
-# RÓTULOS (valor real)
+# RÓTULOS
 # -------------------------------------------------
 if rotulos:
     for _, r in df.iterrows():
@@ -449,10 +459,10 @@ if rotulos:
 # -------------------------------------------------
 max_ton  = max(df[["Capacidade_ton","Acumulado_ton","Chegada_ton","Saida_ton"]].max()) * 1.15
 max_func = df["Funcionarios"].max()
-y_max    = max(max_ton, max_func * 1.2)   # garante que funcionários caibam
+y_max    = max(max_ton, max_func * 1.2)
 
 fig.update_layout(
-    title="Análise Unificada – Todas as métricas em **toneladas**",
+    title="Análise Unificada – Tudo em **toneladas** (capacidade convertida)",
     xaxis_title="Horário",
     yaxis=dict(
         title="Toneladas (ou pessoas – mesma escala)",
@@ -509,7 +519,7 @@ with cols[4]:
 # -------------------------------------------------
 with st.expander("Tabela completa (toneladas)"):
     df_disp = df.copy()
-    df_disp["Capacidade_ton"] = df_disp["Capacidade_ton"].map("{:.3f}".format)
+    df_disp["Capacidade_ton"] = df_disp["Capacidade_ton"].map("{:.1f}".format)
     df_disp["Chegada_ton"]   = df_disp["Chegada_ton"].map("{:.1f}".format)
     df_disp["Saida_ton"]     = df_disp["Saida_ton"].map("{:.1f}".format)
     df_disp["Acumulado_ton"] = df_disp["Acumulado_ton"].map("{:.1f}".format)
