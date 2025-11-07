@@ -7,7 +7,7 @@ import io
 # =============================================
 # CONFIGURAÇÃO
 # =============================================
-st.set_page_config(layout="wide", page_title="Logística + Processamento (Linha Amarela)")
+st.set_page_config(layout="wide", page_title="📊 Acumulado x Produção - CD ")
 st.title("Logística + Processamento Total (Linha Amarela)")
 
 # =============================================
