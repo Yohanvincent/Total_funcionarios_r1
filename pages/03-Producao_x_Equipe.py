@@ -1,55 +1,39 @@
 # pages/3_Producao_x_Equipe.py
-# =============================================
-# OBJETIVO: Produção vs Equipe Disponível
-# LAYOUT:
-# 1. Título + Checkbox
-# 2. GRÁFICO (logo abaixo)
-# 3. Uploads (3 colunas)
-# 4. CAMPOS PARA COLAR (4 campos, abaixo dos uploads)
-# 5. Baixar Excel
-# 6. Dados carregados
-# 7. Expanders com formato
-# =============================================
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import io
 
-# =============================================
-# 1. CONFIGURAÇÃO DA PÁGINA
-# =============================================
 st.set_page_config(layout="wide")
-st.title("Produção vs Equipe Disponível")
-rotulos = st.checkbox("Rótulos", True)
+st.title("Producao vs Equipe Disponivel")
+rotulos = st.checkbox("Rotulos", True)
 
-# =============================================
-# 2. PERSISTÊNCIA (session_state)
-# =============================================
-# Para colagem
-for key in ["jornada_conf", "jornada_aux", "producao_chegada", "producao_saida"]:
-    if key not in st.session_state:
-        st.session_state[key] = ""
+# --- Session state defaults para uploads ---
+if "prod_bytes" not in st.session_state:
+    st.session_state.prod_bytes = None
+if "prod_name" not in st.session_state:
+    st.session_state.prod_name = None
+if "conf_bytes" not in st.session_state:
+    st.session_state.conf_bytes = None
+if "conf_name" not in st.session_state:
+    st.session_state.conf_name = None
+if "aux_bytes" not in st.session_state:
+    st.session_state.aux_bytes = None
+if "aux_name" not in st.session_state:
+    st.session_state.aux_name = None
 
-# Para upload
-for key in ["prod_bytes", "prod_name", "conf_bytes", "conf_name", "aux_bytes", "aux_name"]:
-    if key not in st.session_state:
-        st.session_state[key] = None
+# --- NOVO: Session state para colagem ---
+if "colar_conf" not in st.session_state:
+    st.session_state.colar_conf = ""
+if "colar_aux" not in st.session_state:
+    st.session_state.colar_aux = ""
+if "colar_cheg" not in st.session_state:
+    st.session_state.colar_cheg = ""
+if "colar_said" not in st.session_state:
+    st.session_state.colar_said = ""
 
-# =============================================
-# 3. DADOS PADRÃO
-# =============================================
-padrao_producao = (
-    "Cheg. Ton.\n01:00 7,278041\n02:30 6,936955\n03:30 0\n04:00 3,542897\n04:30 1,676141\n"
-    "05:15 14,263712\n05:30 4,482417\n05:50 3,695104\n06:00 4,389653\n06:00 3,4539\n"
-    "06:00 2,153276\n06:00 2,852677\n06:30 2,720908\n07:15 6,567569\n07:30 1,44941\n"
-    "09:30 12,076731\n10:15 0,1992\n11:00 1,462557\n12:45 0\n18:00 6,98727\n"
-    "21:30 2,837159\n23:30 7,998834\nSaida Ton.\n03:15 5,618428\n04:45 0\n"
-    "20:15 8,43512\n21:00 0,909347\n21:00 6,061068\n21:00 3,913779\n21:00 4,649687\n"
-    "21:00 2,756661\n21:00 2,461966\n21:00 1,787873\n21:00 4,040584\n21:00 2,996577\n"
-    "21:00 4,22898\n21:10 5,479109\n21:20 9,849377\n21:30 5,961456\n21:30 8,997052\n"
-    "22:00 0,351623\n22:00 0,366688\n22:00 7,782288\n22:15 5,598385\n23:45 18,571689"
-)
-
+# --- Padrões (exemplo) ---
+padrao_producao = "Cheg. Ton.\n01:00 7,278041\n02:30 6,936955\n03:30 0\n04:00 3,542897\n04:30 1,676141\n05:15 14,263712\n05:30 4,482417\n05:50 3,695104\n06:00 4,389653\n06:00 3,4539\n06:00 2,153276\n06:00 2,852677\n06:30 2,720908\n07:15 6,567569\n07:30 1,44941\n09:30 12,076731\n10:15 0,1992\n11:00 1,462557\n12:45 0\n18:00 6,98727\n21:30 2,837159\n23:30 7,998834\nSaida Ton.\n03:15 5,618428\n04:45 0\n20:15 8,43512\n21:00 0,909347\n21:00 6,061068\n21:00 3,913779\n21:00 4,649687\n21:00 2,756661\n21:00 2,461966\n21:00 1,787873\n21:00 4,040584\n21:00 2,996577\n21:00 4,22898\n21:10 5,479109\n21:20 9,849377\n21:30 5,961456\n21:30 8,997052\n22:00 0,351623\n22:00 0,366688\n22:00 7,782288\n22:15 5,598385\n23:45 18,571689"
 padrao_confer = """01:00 04:00 05:05 10:23 1
 16:00 20:00 21:05 01:24 2
 18:30 22:30 23:30 03:38 4
@@ -58,7 +42,6 @@ padrao_confer = """01:00 04:00 05:05 10:23 1
 22:00 02:00 03:05 07:03 9
 23:30 03:30 04:35 08:49 19
 23:50 02:40 03:45 09:11 4"""
-
 padrao_aux = """16:00 20:00 21:05 01:24 5
 18:00 22:00 23:00 03:12 1
 19:00 22:52 12
@@ -70,32 +53,31 @@ padrao_aux = """16:00 20:00 21:05 01:24 5
 23:30 03:30 04:35 08:49 25
 23:50 02:40 03:45 09:11 1"""
 
-# =============================================
-# 4. FUNÇÃO: LER DADOS COM PRIORIDADE
-# =============================================
-def ler_dados(prioridade_colar, prioridade_upload, fallback):
-    if prioridade_colar.strip():
-        return prioridade_colar.strip()
-    if prioridade_upload is not None:
-        try:
-            return prioridade_upload.decode("utf-8")
-        except:
-            df = pd.read_excel(io.BytesIO(prioridade_upload), header=None)
-            return "\n".join(" ".join(map(str, row)) for row in df.values)
-    return fallback
+def ler_texto_bytes(b, f):
+    if b is None:
+        return f
+    try:
+        return b.decode("utf-8")
+    except:
+        df = pd.read_excel(io.BytesIO(b), header=None)
+        return "\n".join(" ".join(map(str, r)) for r in df.values)
 
-# Aplicar prioridade
-texto_producao = ler_dados(
-    st.session_state.producao_chegada + "\nSaida Ton.\n" + st.session_state.producao_saida,
-    st.session_state.prod_bytes,
-    padrao_producao
-)
-texto_confer = ler_dados(st.session_state.jornada_conf, st.session_state.conf_bytes, padrao_confer)
-texto_aux = ler_dados(st.session_state.jornada_aux, st.session_state.aux_bytes, padrao_aux)
+# --- PRIORIDADE: Colar → Upload → Padrão ---
+texto_confer = st.session_state.colar_conf.strip() or ler_texto_bytes(st.session_state.conf_bytes, padrao_confer)
+texto_aux = st.session_state.colar_aux.strip() or ler_texto_bytes(st.session_state.aux_bytes, padrao_aux)
 
-# =============================================
-# 5. LEITURA PRODUÇÃO
-# =============================================
+# Produção: junta colagem de chegada + saída
+producao_colada = ""
+if st.session_state.colar_cheg.strip():
+    producao_colada += "Cheg. Ton.\n" + st.session_state.colar_cheg.strip()
+if st.session_state.colar_said.strip():
+    if producao_colada:
+        producao_colada += "\nSaida Ton.\n" + st.session_state.colar_said.strip()
+    else:
+        producao_colada = "Cheg. Ton.\n\nSaida Ton.\n" + st.session_state.colar_said.strip()
+texto_producao = producao_colada or ler_texto_bytes(st.session_state.prod_bytes, padrao_producao)
+
+# --- Leitura Producao ---
 def extrair_producao(texto):
     cheg = {}
     said = {}
@@ -123,12 +105,9 @@ def extrair_producao(texto):
         except:
             pass
     return cheg, said
-
 cheg, said = extrair_producao(texto_producao)
 
-# =============================================
-# 6. LEITURA JORNADAS
-# =============================================
+# --- Leitura Jornadas ---
 def jornadas(t):
     j = []
     for l in t.strip().split("\n"):
@@ -149,7 +128,7 @@ def min_hora(h):
         return 0
 
 def get_horarios_from_texts(*texts):
-    h = set()
+    h = {"00:00", "23:59"}
     for t in texts:
         for l in t.strip().split("\n"):
             p = l.strip().split()
@@ -165,9 +144,6 @@ horas_equipe = get_horarios_from_texts(texto_confer, texto_aux)
 todas_horas.update(horas_equipe)
 horarios = sorted(todas_horas, key=min_hora)
 
-# =============================================
-# 7. CÁLCULO EQUIPE
-# =============================================
 def calcular_equipe(jornadas_list, horarios):
     tl = [min_hora(h) for h in horarios]
     eq = [0] * len(tl)
@@ -213,45 +189,56 @@ eq_range = max_eq + margem
 scale = y_max / eq_range if eq_range > 0 else 1
 df["Equipe_Escalada"] = df["Equipe"] * scale
 
-# =============================================
-# 8. GRÁFICO (NO TOPO)
-# =============================================
+# --- GRÁFICO (ORIGINAL, INTACTO) ---
 fig = go.Figure()
-fig.add_trace(go.Bar(x=df["Horario"], y=df["Chegada_Ton"], name="Chegada (ton)", marker_color="#90EE90", opacity=0.8))
-fig.add_trace(go.Bar(x=df["Horario"], y=df["Saida_Ton"], name="Saída (ton)", marker_color="#E74C3C", opacity=0.8))
+fig.add_trace(go.Bar(
+    x=df["Horario"], y=df["Chegada_Ton"],
+    name="Chegada (ton)", marker_color="#90EE90", opacity=0.8
+))
+fig.add_trace(go.Bar(
+    x=df["Horario"], y=df["Saida_Ton"],
+    name="Saida (ton)", marker_color="#E74C3C", opacity=0.8
+))
 fig.add_trace(go.Scatter(
     x=df["Horario"], y=df["Equipe_Escalada"],
     mode="lines+markers", name="Equipe",
-    line=dict(color="#9B59B6", width=4, dash="dot"), marker=dict(size=8),
+    line=dict(color="#9B59B6", width=4, dash="dot"),
+    marker=dict(size=8),
     customdata=df["Equipe"],
-    hovertemplate="Equipe: %{customdata}<extra></extra>"
+    hovertemplate="Equipe: %{customdata}<extra></extra>",
+    showlegend=True
 ))
 
 if rotulos:
     for _, r in df.iterrows():
         if r["Chegada_Ton"] > 0:
-            fig.add_annotation(x=r["Horario"], y=r["Chegada_Ton"], text=f"{r['Chegada_Ton']}", font=dict(color="#2ECC71", size=9),
-                               bgcolor="white", bordercolor="#90EE90", borderwidth=1, showarrow=False, yshift=10)
+            fig.add_annotation(x=r["Horario"], y=r["Chegada_Ton"],
+                text=f"{r['Chegada_Ton']}", font=dict(color="#2ECC71", size=9),
+                bgcolor="white", bordercolor="#90EE90", borderwidth=1,
+                showarrow=False, yshift=10)
         if r["Saida_Ton"] > 0:
-            fig.add_annotation(x=r["Horario"], y=r["Saida_Ton"], text=f"{r['Saida_Ton']}", font=dict(color="#E74C3C", size=9),
-                               bgcolor="white", bordercolor="#E74C3C", borderwidth=1, showarrow=False, yshift=10)
+            fig.add_annotation(x=r["Horario"], y=r["Saida_Ton"],
+                text=f"{r['Saida_Ton']}", font=dict(color="#E74C3C", size=9),
+                bgcolor="white", bordercolor="#E74C3C", borderwidth=1,
+                showarrow=False, yshift=10)
         if r["Equipe"] > 0:
-            fig.add_annotation(x=r["Horario"], y=r["Equipe_Escalada"], text=f"{int(r['Equipe'])}", font=dict(color="#9B59B6", size=9),
-                               bgcolor="white", bordercolor="#9B59B6", borderwidth=1, showarrow=False, yshift=0, align="center")
+            fig.add_annotation(x=r["Horario"], y=r["Equipe_Escalada"],
+                text=f"{int(r['Equipe'])}", font=dict(color="#9B59B6", size=9),
+                bgcolor="white", bordercolor="#9B59B6", borderwidth=1,
+                showarrow=False, yshift=0, align="center", valign="middle")
 
 fig.update_layout(
-    xaxis_title="Horário", yaxis=dict(title="Toneladas | Equipe (escalada)", side="left", range=[0, y_max], zeroline=False),
+    xaxis_title="Horario",
+    yaxis=dict(title="Toneladas | Equipe (escalada)", side="left", range=[0, y_max], zeroline=False),
     height=650, hovermode="x unified", legend=dict(x=0, y=1.1, orientation="h"),
     barmode="stack", margin=dict(l=60, r=60, t=40, b=60)
 )
 st.plotly_chart(fig, use_container_width=True)
 
-# =============================================
-# 9. UPLOADS (ABAIXO DO GRÁFICO)
-# =============================================
+# --- UPLOADS (ORIGINAL) ---
 col1, col2, col3 = st.columns(3)
 with col1:
-    st.markdown("**Upload Produção (Cheg. + Saída)**")
+    st.markdown("**Upload Producao (Cheg. + Saida)**")
     up_prod = st.file_uploader("TXT/CSV/XLSX", ["txt","csv","xlsx"], key="up_prod")
     if up_prod:
         st.session_state.prod_bytes = up_prod.getvalue()
@@ -275,67 +262,37 @@ with col3:
     if st.session_state.aux_name:
         st.success(f"Auxiliares: **{st.session_state.aux_name}**")
 
-st.markdown("<br>", unsafe_allow_html=True)
-
-# =============================================
-# 10. CAMPOS PARA COLAR (4 CAMPOS)
-# =============================================
-st.markdown("### Ou cole os dados diretamente (substitui upload/padrão)")
+# --- NOVO: 4 CAMPOS PARA COLAR (ABAIXO DOS UPLOADS) ---
+st.markdown("### Ou cole os dados diretamente")
 
 c1, c2 = st.columns(2)
 with c1:
     st.markdown("**Conferentes (CD Chapecó)**")
-    conf_colado = st.text_area(
-        "Cole aqui (jornadas)",
-        value=st.session_state.jornada_conf,
-        height=200,
-        placeholder="01:00 04:00 05:05 10:23 1\n...",
-        key="colar_conf"
-    )
-    if conf_colado != st.session_state.jornada_conf:
-        st.session_state.jornada_conf = conf_colado
+    conf_input = st.text_area("Cole aqui", value=st.session_state.colar_conf, height=180, key="conf_colar")
+    if conf_input != st.session_state.colar_conf:
+        st.session_state.colar_conf = conf_input
         st.success("Conferentes colados!")
 
     st.markdown("**Produção - Chegada**")
-    cheg_colado = st.text_area(
-        "Cole aqui (HH:MM valor)",
-        value=st.session_state.producao_chegada,
-        height=200,
-        placeholder="00:00 1,7\n00:00 6,3\n...",
-        key="colar_cheg"
-    )
-    if cheg_colado != st.session_state.producao_chegada:
-        st.session_state.producao_chegada = cheg_colado
+    cheg_input = st.text_area("HH:MM valor", value=st.session_state.colar_cheg, height=180, key="cheg_colar")
+    if cheg_input != st.session_state.colar_cheg:
+        st.session_state.colar_cheg = cheg_input
         st.success("Chegada colada!")
 
 with c2:
     st.markdown("**Auxiliares**")
-    aux_colado = st.text_area(
-        "Cole aqui (jornadas)",
-        value=st.session_state.jornada_aux,
-        height=200,
-        placeholder="16:00 20:00 21:05 01:24 5\n...",
-        key="colar_aux"
-    )
-    if aux_colado != st.session_state.jornada_aux:
-        st.session_state.jornada_aux = aux_colado
+    aux_input = st.text_area("Cole aqui", value=st.session_state.colar_aux, height=180, key="aux_colar")
+    if aux_input != st.session_state.colar_aux:
+        st.session_state.colar_aux = aux_input
         st.success("Auxiliares colados!")
 
     st.markdown("**Produção - Saída**")
-    said_colado = st.text_area(
-        "Cole aqui (HH:MM valor)",
-        value=st.session_state.producao_saida,
-        height=200,
-        placeholder="00:00 0,1\n00:30 1,4\n...",
-        key="colar_said"
-    )
-    if said_colado != st.session_state.producao_saida:
-        st.session_state.producao_saida = said_colado
+    said_input = st.text_area("HH:MM valor", value=st.session_state.colar_said, height=180, key="said_colar")
+    if said_input != st.session_state.colar_said:
+        st.session_state.colar_said = said_input
         st.success("Saída colada!")
 
-# =============================================
-# 11. BAIXAR EXCEL
-# =============================================
+# --- BAIXAR EXCEL (ORIGINAL) ---
 out = io.BytesIO()
 df_export = df[["Horario", "Chegada_Ton", "Saida_Ton", "Equipe", "Equipe_Conf", "Equipe_Aux"]].copy()
 with pd.ExcelWriter(out, engine="openpyxl") as w:
@@ -343,24 +300,20 @@ with pd.ExcelWriter(out, engine="openpyxl") as w:
 out.seek(0)
 st.download_button("Baixar Excel", out, "producao_vs_equipe.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-# =============================================
-# 12. DADOS CARREGADOS
-# =============================================
-if st.session_state.prod_name or st.session_state.conf_name or st.session_state.aux_name or st.session_state.producao_chegada or st.session_state.producao_saida:
-    st.markdown("### Dados utilizados")
-    if st.session_state.producao_chegada or st.session_state.producao_saida:
-        st.code(f"Cheg. Ton.\n{st.session_state.producao_chegada}\nSaida Ton.\n{st.session_state.producao_saida}", language="text")
-    if st.session_state.jornada_conf:
-        st.code(st.session_state.jornada_conf, language="text")
-    if st.session_state.jornada_aux:
-        st.code(st.session_state.jornada_aux, language="text")
+# --- DADOS CARREGADOS (ORIGINAL + COLADOS) ---
+if st.session_state.prod_name or st.session_state.conf_name or st.session_state.aux_name or st.session_state.colar_cheg or st.session_state.colar_said:
+    st.markdown("### Dados Carregados")
+    if st.session_state.prod_name:
+        st.code(texto_producao, language="text")
+    if st.session_state.conf_name or st.session_state.colar_conf:
+        st.code(texto_confer, language="text")
+    if st.session_state.aux_name or st.session_state.colar_aux:
+        st.code(texto_aux, language="text")
 
-# =============================================
-# 13. EXPANDERS
-# =============================================
-with st.expander("Formato do arquivo - Produção"):
+# --- EXPANDERS (ORIGINAL) ---
+with st.expander("Formato do arquivo - Producao"):
     st.markdown("Cheg. Ton.\n01:00 7,278041\n...\nSaida Ton.\n23:45 18,571689")
 with st.expander("Formato do arquivo - Conferentes"):
-    st.markdown("HH:MM HH:MM HH:MM HH:MM QTD (com intervalo)\nHH:MM HH:MM QTD (simples)")
+    st.markdown("HH:MM HH:MM HH:MM HH:MM QTD (jornada com intervalo)\nHH:MM HH:MM QTD (jornada simples)\n- Uma linha por grupo de colaboradores")
 with st.expander("Formato do arquivo - Auxiliares"):
-    st.markdown("HH:MM HH:MM HH:MM HH:MM QTD (com intervalo)\nHH:MM HH:MM QTD (simples)")
+    st.markdown("HH:MM HH:MM HH:MM HH:MM QTD (jornada com intervalo)\nHH:MM HH:MM QTD (jornada simples)\n- Uma linha por grupo de colaboradores")
