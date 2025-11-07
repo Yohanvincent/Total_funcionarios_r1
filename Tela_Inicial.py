@@ -13,7 +13,7 @@ st.set_page_config(
 )
 
 # =============================================
-# AUTENTICAÇÃO COM FALLBACK
+# AUTENTICAÇÃO (OBRIGATÓRIO secrets.toml)
 # =============================================
 try:
     authenticator = stauth.Authenticate(
@@ -24,16 +24,19 @@ try:
         "chave_muito_forte_123456789",
         cookie_expiry_days=7
     )
-except:
-    st.warning("⚠️ Modo teste: secrets.toml não encontrado. Usando usuário padrão.")
-    names = ["Admin Logística"]
-    usernames = ["admin"]
-    passwords = ["logistica123"]
-    hashed_passwords = stauth.Hasher(passwords).generate()
-    authenticator = stauth.Authenticate(
-        names, usernames, hashed_passwords,
-        "logistica_dashboard", "chave_muito_forte_123456789", cookie_expiry_days=7
-    )
+except KeyError:
+    st.error("❌ **secrets.toml não encontrado ou mal formatado!**")
+    st.info("Vá em **Settings → Secrets** e adicione:")
+    st.code("""
+[auth]
+names = ["Admin Logística"]
+usernames = ["admin"]
+passwords = ["$2b$12$5uQ2z7W3k8Y9p0r1t2v3w4x6y7z8A9B0C1D2E3F4G5H6I7J8K9L0M"]
+    """)
+    st.stop()
+except Exception as e:
+    st.error(f"Erro inesperado: {e}")
+    st.stop()
 
 # =============================================
 # TELA DE LOGIN
@@ -88,6 +91,9 @@ if authentication_status:
         unsafe_allow_html=True
     )
 
+# =============================================
+# ERROS
+# =============================================
 elif authentication_status == False:
     st.error("Usuário ou senha incorretos")
 elif authentication_status is None:
