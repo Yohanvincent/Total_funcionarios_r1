@@ -1,6 +1,1 @@
-# Ignora arquivos secretos (NUNCA commit senhas!)
 .streamlit/secrets.toml
-
-# Outros (opcional)
-__pycache__
-*.pyc
