@@ -8,24 +8,23 @@ import io
 # CONFIGURAÇÃO
 # =============================================
 st.set_page_config(layout="wide", page_title="Acumulado x Produção")
-st.title("📦 Capacidade × Produção × Acumulado × Funcionários")
+st.title("📦 Produção × Acumulado × Funcionários (sem Capacidade)")
 
-# --- Fator dinâmico ---
+# --- Fator dinâmico (mantido, mas não usado) ---
 st.sidebar.header("Configurações")
 fator_dinamico = st.sidebar.number_input(
     "Fator Dinâmico (kg/vol)", min_value=0.0, value=16.10, step=0.1, format="%.2f"
 )
 st.sidebar.write(f"**Fator atual:** {fator_dinamico:.2f}")
 
-# --- Rótulos ---
 rotulos = st.checkbox("Exibir rótulos", True)
 
 # =============================================
 # SESSION STATE
 # =============================================
 keys = [
-    "chegadas_bytes", "saidas_bytes", "conf_bytes", "aux_bytes", "capacidade_bytes",
-    "chegadas_name", "saidas_name", "conf_name", "aux_name", "capacidade_name"
+    "chegadas_bytes", "saidas_bytes", "conf_bytes", "aux_bytes",
+    "chegadas_name", "saidas_name", "conf_name", "aux_name"
 ]
 for k in keys:
     if k not in st.session_state:
@@ -242,31 +241,6 @@ padrao_aux = """16:00 20:00 21:05 01:24 5
 23:30 03:30 04:35 08:49 25
 23:50 02:40 03:45 09:11 1"""
 
-padrao_capacidade = """00:00 4.779
-01:00 3.197
-02:00 3.411
-03:00 3.790
-04:00 3.289
-05:00 3.925
-06:00 2.637
-07:00 1.457
-08:00 1.127
-09:00 58
-10:00 48
-11:00 48
-12:00 48
-13:00 48
-14:00 48
-15:00 48
-16:00 300
-17:00 300
-18:00 787
-19:00 2.084
-20:00 1.844
-21:00 3.561
-22:00 4.121
-23:00 3.585"""
-
 # =============================================
 # FUNÇÕES AUXILIARES
 # =============================================
@@ -301,20 +275,6 @@ def extrair_jornadas(texto):
             j.append({"e": p[0], "sf": p[1], "q": int(p[2])})
     return j
 
-def extrair_capacidade(texto):
-    c = {}
-    for l in texto.strip().splitlines():
-        p = l.strip().split()
-        if len(p) >= 2:
-            h, v = p[0], p[1].replace(",", ".")
-            try: c[h] = float(v)
-            except: pass
-    return c
-
-def floor_hour(h):
-    hh = str(min_hora(h) // 60).zfill(2)
-    return f"{hh}:00"
-
 # =============================================
 # CARREGAR DADOS
 # =============================================
@@ -322,16 +282,14 @@ chegadas_txt = ler_bytes(st.session_state.chegadas_bytes, padrao_chegadas)
 saidas_txt   = ler_bytes(st.session_state.saidas_bytes,   padrao_saidas)
 conf_txt     = ler_bytes(st.session_state.conf_bytes,     padrao_conf)
 aux_txt      = ler_bytes(st.session_state.aux_bytes,      padrao_aux)
-cap_txt      = ler_bytes(st.session_state.capacidade_bytes, padrao_capacidade)
 
 cheg = extrair_movimentos(chegadas_txt)
 said = extrair_movimentos(saidas_txt)
-cap_vol = extrair_capacidade(cap_txt)  # volumes
 
 # =============================================
 # TODAS AS HORAS ÚNICAS
 # =============================================
-horas_set = set(cheg.keys()) | set(said.keys()) | set(cap_vol.keys())
+horas_set = set(cheg.keys()) | set(said.keys())
 for txt in [conf_txt, aux_txt]:
     for l in txt.splitlines():
         p = l.split()
@@ -362,7 +320,7 @@ for j in extrair_jornadas(conf_txt): aplicar_jornada(j, timeline_min)
 for j in extrair_jornadas(aux_txt):   aplicar_jornada(j, timeline_min)
 
 # =============================================
-# DATAFRAME FINAL
+# DATAFRAME FINAL (SEM CAPACIDADE)
 # =============================================
 df = pd.DataFrame({
     "Horario": horarios,
@@ -370,40 +328,16 @@ df = pd.DataFrame({
     "Saida_ton": [round(said.get(h, 0), 1) for h in horarios],
     "Funcionarios": func_total,
 })
-
-# Capacidade: volume × 1000 × fator → toneladas
-cap_ton = []
-for h in horarios:
-    vol = cap_vol.get(floor_hour(h), 0)
-    ton = (vol * 1000 * fator_dinamico) / 1000  # em toneladas
-    cap_ton.append(round(ton, 1))
-df["Capacidade_ton"] = cap_ton
-
 df["Acumulado_ton"] = (df["Chegada_ton"] - df["Saida_ton"]).cumsum().round(1)
 
 # =============================================
-# GRÁFICO (como no 5_Capacidade_x_Producao.py)
+# GRÁFICO (sem capacidade)
 # =============================================
 fig = go.Figure()
 
 # Barras empilhadas
 fig.add_trace(go.Bar(x=df["Horario"], y=df["Chegada_ton"], name="Chegada (ton)", marker_color="#90EE90"))
 fig.add_trace(go.Bar(x=df["Horario"], y=df["Saida_ton"], name="Saída (ton)", marker_color="#E74C3C"))
-
-# Capacidade (degrau)
-x_step, y_step = [], []
-for i, h in enumerate(df["Horario"]):
-    x_step.append(h)
-    y_step.append(df["Capacidade_ton"].iloc[i])
-    if i < len(df) - 1:
-        x_step.append(df["Horario"].iloc[i+1])
-        y_step.append(df["Capacidade_ton"].iloc[i])
-fig.add_trace(go.Scatter(
-    x=x_step, y=y_step,
-    mode="lines", name="Capacidade (ton)",
-    line=dict(color="#9B59B6", width=4),
-    hovertemplate="Capacidade: %{y:.1f} t"
-))
 
 # Acumulado (área)
 fig.add_trace(go.Scatter(
@@ -413,7 +347,7 @@ fig.add_trace(go.Scatter(
     hovertemplate="%{y:.1f} t"
 ))
 
-# Funcionários (linha fina)
+# Funcionários (linha pontilhada)
 fig.add_trace(go.Scatter(
     x=df["Horario"], y=df["Funcionarios"],
     mode="lines+markers", name="Funcionários",
@@ -435,11 +369,11 @@ if rotulos:
                                bgcolor="white", bordercolor="#E74C3C", showarrow=False, yshift=10)
 
 # Layout
-max_y = max(df[["Capacidade_ton","Acumulado_ton","Chegada_ton","Saida_ton"]].max()) * 1.15
+max_y = max(df[["Acumulado_ton","Chegada_ton","Saida_ton"]].max()) * 1.15
 max_y = max(max_y, df["Funcionarios"].max() * 1.2)
 
 fig.update_layout(
-    title="Análise Unificada – Tudo em Toneladas",
+    title="Produção × Acumulado × Funcionários (sem Capacidade)",
     xaxis_title="Horário",
     yaxis=dict(title="Toneladas (ou pessoas)", range=[0, max_y]),
     barmode="stack",
@@ -453,10 +387,10 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 # =============================================
-# UPLOADS
+# UPLOADS (sem capacidade)
 # =============================================
 st.markdown("### Upload de Arquivos")
-cols = st.columns(5)
+cols = st.columns(4)
 with cols[0]:
     up = st.file_uploader("Chegadas", ["txt","csv","xlsx"], key="c")
     if up: st.session_state.chegadas_bytes, st.session_state.chegadas_name = up.getvalue(), up.name
@@ -473,17 +407,12 @@ with cols[3]:
     up = st.file_uploader("Auxiliares", ["txt","csv","xlsx"], key="aux")
     if up: st.session_state.aux_bytes, st.session_state.aux_name = up.getvalue(), up.name
     if st.session_state.aux_name: st.success(st.session_state.aux_name)
-with cols[4]:
-    up = st.file_uploader("Capacidade", ["txt","csv","xlsx"], key="cap")
-    if up: st.session_state.capacidade_bytes, st.session_state.capacidade_name = up.getvalue(), up.name
-    if st.session_state.capacidade_name: st.success(st.session_state.capacidade_name)
 
 # =============================================
 # TABELA
 # =============================================
 with st.expander("Tabela Completa"):
     df_disp = df.copy()
-    df_disp["Capacidade_ton"] = df_disp["Capacidade_ton"].map("{:.1f}".format)
     st.dataframe(df_disp, use_container_width=True)
     csv = df.to_csv(index=False).encode()
-    st.download_button("Baixar CSV", csv, "dados_unificados.csv", "text/csv")
+    st.download_button("Baixar CSV", csv, "dados_sem_capacidade.csv", "text/csv")
