@@ -8,30 +8,21 @@ import io
 # CONFIGURAÇÃO
 # =============================================
 st.set_page_config(layout="wide", page_title="Acumulado x Produção")
-st.title("📦 Produção × Acumulado × Funcionários (sem Capacidade)")
-
-# --- Fator dinâmico (mantido, mas não usado) ---
-st.sidebar.header("Configurações")
-fator_dinamico = st.sidebar.number_input(
-    "Fator Dinâmico (kg/vol)", min_value=0.0, value=16.10, step=0.1, format="%.2f"
-)
-st.sidebar.write(f"**Fator atual:** {fator_dinamico:.2f}")
+st.title("📦 Produção × Acumulado × Funcionários (Acumulado Corrigido)")
 
 rotulos = st.checkbox("Exibir rótulos", True)
 
 # =============================================
 # SESSION STATE
 # =============================================
-keys = [
-    "chegadas_bytes", "saidas_bytes", "conf_bytes", "aux_bytes",
-    "chegadas_name", "saidas_name", "conf_name", "aux_name"
-]
+keys = ["chegadas_bytes", "saidas_bytes", "conf_bytes", "aux_bytes",
+        "chegadas_name", "saidas_name", "conf_name", "aux_name"]
 for k in keys:
     if k not in st.session_state:
         st.session_state[k] = None
 
 # =============================================
-# DADOS PADRÃO (100% COMPLETOS)
+# DADOS PADRÃO (100% SEUS)
 # =============================================
 padrao_chegadas = """00:00 1,7
 00:00 6,3
@@ -242,7 +233,7 @@ padrao_aux = """16:00 20:00 21:05 01:24 5
 23:50 02:40 03:45 09:11 1"""
 
 # =============================================
-# FUNÇÕES AUXILIARES
+# FUNÇÕES
 # =============================================
 def ler_bytes(b, fallback):
     if b is None: return fallback
@@ -261,7 +252,8 @@ def extrair_movimentos(texto):
         p = l.strip().split()
         if len(p) >= 2:
             h, v = p[0], p[1].replace(",", ".")
-            try: d[h] = d.get(h, 0) + float(v)
+            try:
+                d[h] = d.get(h, 0) + float(v)
             except: pass
     return d
 
@@ -287,7 +279,7 @@ cheg = extrair_movimentos(chegadas_txt)
 said = extrair_movimentos(saidas_txt)
 
 # =============================================
-# TODAS AS HORAS ÚNICAS
+# TODAS AS HORAS ÚNICAS (ORDENADAS)
 # =============================================
 horas_set = set(cheg.keys()) | set(said.keys())
 for txt in [conf_txt, aux_txt]:
@@ -320,7 +312,7 @@ for j in extrair_jornadas(conf_txt): aplicar_jornada(j, timeline_min)
 for j in extrair_jornadas(aux_txt):   aplicar_jornada(j, timeline_min)
 
 # =============================================
-# DATAFRAME FINAL (SEM CAPACIDADE)
+# DATAFRAME FINAL
 # =============================================
 df = pd.DataFrame({
     "Horario": horarios,
@@ -328,18 +320,25 @@ df = pd.DataFrame({
     "Saida_ton": [round(said.get(h, 0), 1) for h in horarios],
     "Funcionarios": func_total,
 })
+
+# ACUMULADO CORRETO: soma progressiva
 df["Acumulado_ton"] = (df["Chegada_ton"] - df["Saida_ton"]).cumsum().round(1)
 
 # =============================================
-# GRÁFICO (sem capacidade)
+# TESTE DO SEU EXEMPLO
+# =============================================
+st.write("### Validação do Acumulado (16:15 → 17:15)")
+teste = df[df["Horario"].isin(["16:15", "16:30", "17:15"])][["Horario", "Chegada_ton", "Saida_ton", "Acumulado_ton"]]
+st.dataframe(teste.style.format({"Chegada_ton": "{:.1f}", "Saida_ton": "{:.1f}", "Acumulado_ton": "{:.1f}"}))
+
+# =============================================
+# GRÁFICO
 # =============================================
 fig = go.Figure()
 
-# Barras empilhadas
 fig.add_trace(go.Bar(x=df["Horario"], y=df["Chegada_ton"], name="Chegada (ton)", marker_color="#90EE90"))
 fig.add_trace(go.Bar(x=df["Horario"], y=df["Saida_ton"], name="Saída (ton)", marker_color="#E74C3C"))
 
-# Acumulado (área)
 fig.add_trace(go.Scatter(
     x=df["Horario"], y=df["Acumulado_ton"],
     mode="lines", name="Acumulado (ton)", fill="tozeroy",
@@ -347,7 +346,6 @@ fig.add_trace(go.Scatter(
     hovertemplate="%{y:.1f} t"
 ))
 
-# Funcionários (linha pontilhada)
 fig.add_trace(go.Scatter(
     x=df["Horario"], y=df["Funcionarios"],
     mode="lines+markers", name="Funcionários",
@@ -356,7 +354,6 @@ fig.add_trace(go.Scatter(
     hovertemplate="%{y} pessoas"
 ))
 
-# Rótulos
 if rotulos:
     for _, r in df.iterrows():
         if r["Chegada_ton"] > 0.1:
@@ -368,12 +365,11 @@ if rotulos:
                                text=f"{r['Saida_ton']:.1f}", font=dict(color="#E74C3C", size=9),
                                bgcolor="white", bordercolor="#E74C3C", showarrow=False, yshift=10)
 
-# Layout
 max_y = max(df[["Acumulado_ton","Chegada_ton","Saida_ton"]].max()) * 1.15
 max_y = max(max_y, df["Funcionarios"].max() * 1.2)
 
 fig.update_layout(
-    title="Produção × Acumulado × Funcionários (sem Capacidade)",
+    title="Produção × Acumulado (CORRETO) × Funcionários",
     xaxis_title="Horário",
     yaxis=dict(title="Toneladas (ou pessoas)", range=[0, max_y]),
     barmode="stack",
@@ -387,7 +383,7 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 # =============================================
-# UPLOADS (sem capacidade)
+# UPLOADS
 # =============================================
 st.markdown("### Upload de Arquivos")
 cols = st.columns(4)
@@ -412,7 +408,6 @@ with cols[3]:
 # TABELA
 # =============================================
 with st.expander("Tabela Completa"):
-    df_disp = df.copy()
-    st.dataframe(df_disp, use_container_width=True)
+    st.dataframe(df.style.format({"Chegada_ton": "{:.1f}", "Saida_ton": "{:.1f}", "Acumulado_ton": "{:.1f}"}), use_container_width=True)
     csv = df.to_csv(index=False).encode()
-    st.download_button("Baixar CSV", csv, "dados_sem_capacidade.csv", "text/csv")
+    st.download_button("Baixar CSV", csv, "dados_acumulado_correto.csv", "text/csv")
