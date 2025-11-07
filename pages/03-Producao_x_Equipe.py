@@ -22,7 +22,7 @@ if "aux_bytes" not in st.session_state:
 if "aux_name" not in st.session_state:
     st.session_state.aux_name = None
 
-# --- NOVO: Session state para colagem ---
+# --- Session state para colagem ---
 if "colar_conf" not in st.session_state:
     st.session_state.colar_conf = ""
 if "colar_aux" not in st.session_state:
@@ -32,7 +32,7 @@ if "colar_cheg" not in st.session_state:
 if "colar_said" not in st.session_state:
     st.session_state.colar_said = ""
 
-# --- Padrões (exemplo) ---
+# --- Padrões ---
 padrao_producao = "Cheg. Ton.\n01:00 7,278041\n02:30 6,936955\n03:30 0\n04:00 3,542897\n04:30 1,676141\n05:15 14,263712\n05:30 4,482417\n05:50 3,695104\n06:00 4,389653\n06:00 3,4539\n06:00 2,153276\n06:00 2,852677\n06:30 2,720908\n07:15 6,567569\n07:30 1,44941\n09:30 12,076731\n10:15 0,1992\n11:00 1,462557\n12:45 0\n18:00 6,98727\n21:30 2,837159\n23:30 7,998834\nSaida Ton.\n03:15 5,618428\n04:45 0\n20:15 8,43512\n21:00 0,909347\n21:00 6,061068\n21:00 3,913779\n21:00 4,649687\n21:00 2,756661\n21:00 2,461966\n21:00 1,787873\n21:00 4,040584\n21:00 2,996577\n21:00 4,22898\n21:10 5,479109\n21:20 9,849377\n21:30 5,961456\n21:30 8,997052\n22:00 0,351623\n22:00 0,366688\n22:00 7,782288\n22:15 5,598385\n23:45 18,571689"
 padrao_confer = """01:00 04:00 05:05 10:23 1
 16:00 20:00 21:05 01:24 2
@@ -66,7 +66,6 @@ def ler_texto_bytes(b, f):
 texto_confer = st.session_state.colar_conf.strip() or ler_texto_bytes(st.session_state.conf_bytes, padrao_confer)
 texto_aux = st.session_state.colar_aux.strip() or ler_texto_bytes(st.session_state.aux_bytes, padrao_aux)
 
-# Produção: junta colagem de chegada + saída
 producao_colada = ""
 if st.session_state.colar_cheg.strip():
     producao_colada += "Cheg. Ton.\n" + st.session_state.colar_cheg.strip()
@@ -179,7 +178,7 @@ df = pd.DataFrame({
     "Equipe_Aux": eq_aux
 })
 
-# Escala para equipe
+# Escala
 max_cheg = max(cheg_val) if cheg_val else 0
 max_said = max(said_val) if said_val else 0
 max_eq = max(df["Equipe"]) if len(df) else 0
@@ -189,7 +188,7 @@ eq_range = max_eq + margem
 scale = y_max / eq_range if eq_range > 0 else 1
 df["Equipe_Escalada"] = df["Equipe"] * scale
 
-# --- GRÁFICO (ORIGINAL, INTACTO) ---
+# --- GRÁFICO (CORRIGIDO: SAÍDA = VERMELHO) ---
 fig = go.Figure()
 fig.add_trace(go.Bar(
     x=df["Horario"], y=df["Chegada_Ton"],
@@ -197,7 +196,7 @@ fig.add_trace(go.Bar(
 ))
 fig.add_trace(go.Bar(
     x=df["Horario"], y=df["Saida_Ton"],
-    name="Saida (ton)", marker_color="#E74C3C", opacity=0.8
+    name="Saída (ton)", marker_color="#E74C3C", opacity=0.8  # CORRIGIDO: VERMELHO
 ))
 fig.add_trace(go.Scatter(
     x=df["Horario"], y=df["Equipe_Escalada"],
@@ -235,7 +234,7 @@ fig.update_layout(
 )
 st.plotly_chart(fig, use_container_width=True)
 
-# --- UPLOADS (ORIGINAL) ---
+# --- UPLOADS ---
 col1, col2, col3 = st.columns(3)
 with col1:
     st.markdown("**Upload Producao (Cheg. + Saida)**")
@@ -262,7 +261,7 @@ with col3:
     if st.session_state.aux_name:
         st.success(f"Auxiliares: **{st.session_state.aux_name}**")
 
-# --- NOVO: 4 CAMPOS PARA COLAR (ABAIXO DOS UPLOADS) ---
+# --- CAMPOS PARA COLAR ---
 st.markdown("### Ou cole os dados diretamente")
 
 c1, c2 = st.columns(2)
@@ -292,7 +291,7 @@ with c2:
         st.session_state.colar_said = said_input
         st.success("Saída colada!")
 
-# --- BAIXAR EXCEL (ORIGINAL) ---
+# --- BAIXAR EXCEL ---
 out = io.BytesIO()
 df_export = df[["Horario", "Chegada_Ton", "Saida_Ton", "Equipe", "Equipe_Conf", "Equipe_Aux"]].copy()
 with pd.ExcelWriter(out, engine="openpyxl") as w:
@@ -300,7 +299,7 @@ with pd.ExcelWriter(out, engine="openpyxl") as w:
 out.seek(0)
 st.download_button("Baixar Excel", out, "producao_vs_equipe.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-# --- DADOS CARREGADOS (ORIGINAL + COLADOS) ---
+# --- DADOS CARREGADOS ---
 if st.session_state.prod_name or st.session_state.conf_name or st.session_state.aux_name or st.session_state.colar_cheg or st.session_state.colar_said:
     st.markdown("### Dados Carregados")
     if st.session_state.prod_name:
@@ -310,7 +309,7 @@ if st.session_state.prod_name or st.session_state.conf_name or st.session_state.
     if st.session_state.aux_name or st.session_state.colar_aux:
         st.code(texto_aux, language="text")
 
-# --- EXPANDERS (ORIGINAL) ---
+# --- EXPANDERS ---
 with st.expander("Formato do arquivo - Producao"):
     st.markdown("Cheg. Ton.\n01:00 7,278041\n...\nSaida Ton.\n23:45 18,571689")
 with st.expander("Formato do arquivo - Conferentes"):
