@@ -7,8 +7,19 @@ import io
 # =============================================
 # CONFIGURAÇÃO
 # =============================================
-st.set_page_config(layout="wide", page_title="Acumulado x Produção")
-st.title("📦 Produção × Acumulado × Funcionários (Acumulado ≥ 0)")
+st.set_page_config(layout="wide", page_title="Logística Real")
+st.title("Logística Real: Chegada → Processamento → Saída")
+
+# --- CONFIGURAÇÕES ---
+st.sidebar.header("Configurações")
+fator_kg_por_vol = st.sidebar.number_input(
+    "1 vol = ? kg", min_value=0.1, value=16.10, step=0.1, format="%.2f"
+)
+produtividade_kg_h = st.sidebar.number_input(
+    "Produtividade por funcionário (kg/hora)", min_value=0.0, value=500.0, step=50.0
+)
+st.sidebar.write(f"**Fator vol → kg:** {fator_kg_por_vol:.2f} kg/vol")
+st.sidebar.write(f"**Produtividade:** {produtividade_kg_h:,.0f} kg/h por pessoa")
 
 rotulos = st.checkbox("Exibir rótulos", True)
 
@@ -101,7 +112,7 @@ padrao_chegadas = """00:00 1,7
 21:30 4,6
 21:30 3,9
 21:30 0,8
-21:30 5,4
+21:30  5,4
 21:40 9,2
 21:40 9,1
 21:40 2,2
@@ -274,11 +285,11 @@ saidas_txt   = ler_bytes(st.session_state.saidas_bytes,   padrao_saidas)
 conf_txt     = ler_bytes(st.session_state.conf_bytes,     padrao_conf)
 aux_txt      = ler_bytes(st.session_state.aux_bytes,      padrao_aux)
 
-cheg = extrair_movimentos(chegadas_txt)
-said = extrair_movimentos(saidas_txt)
+cheg = extrair_movimentos(chegadas_txt)  # ton
+said = extrair_movimentos(saidas_txt)    # ton
 
 # =============================================
-# TODAS AS HORAS ÚNICAS
+# HORÁRIOS ÚNICOS
 # =============================================
 horas_set = set(cheg.keys()) | set(said.keys())
 for txt in [conf_txt, aux_txt]:
@@ -311,7 +322,7 @@ for j in extrair_jornadas(conf_txt): aplicar_jornada(j, timeline_min)
 for j in extrair_jornadas(aux_txt):   aplicar_jornada(j, timeline_min)
 
 # =============================================
-# DATAFRAME FINAL
+# DATAFRAME
 # =============================================
 df = pd.DataFrame({
     "Horario": horarios,
@@ -320,58 +331,70 @@ df = pd.DataFrame({
     "Funcionarios": func_total,
 })
 
-# ACUMULADO: NUNCA NEGATIVO
-df["Acumulado_ton"] = (df["Chegada_ton"] - df["Saida_ton"]).cumsum().clip(lower=0).round(1)
+# Capacidade de processamento (kg/h)
+df["Capacidade_kg_h"] = df["Funcionarios"] * produtividade_kg_h
+df["Capacidade_ton_h"] = (df["Capacidade_kg_h"] / 1000).round(1)
+
+# Acumulado real (nunca negativo)
+acumulado = 0.0
+acumulado_list = []
+for _, row in df.iterrows():
+    acumulado = max(0, acumulado + row["Chegada_ton"] - row["Saida_ton"])
+    acumulado_list.append(round(acumulado, 1))
+df["Acumulado_ton"] = acumulado_list
 
 # =============================================
-# VALIDAÇÃO (seu exemplo)
-# =============================================
-st.write("### Validação: Acumulado nunca negativo")
-val = df[df["Horario"].isin(["16:15", "16:30", "17:15", "18:00", "21:30"])][["Horario", "Chegada_ton", "Saida_ton", "Acumulado_ton"]]
-st.dataframe(val.style.format({"Chegada_ton": "{:.1f}", "Saida_ton": "{:.1f}", "Acumulado_ton": "{:.1f}"}))
-
-# =============================================
-# GRÁFICO
+# GRÁFICO: LOGÍSTICA REAL
 # =============================================
 fig = go.Figure()
 
-fig.add_trace(go.Bar(x=df["Horario"], y=df["Chegada_ton"], name="Chegada (ton)", marker_color="#90EE90"))
-fig.add_trace(go.Bar(x=df["Horario"], y=df["Saida_ton"], name="Saída (ton)", marker_color="#E74C3C"))
-
-fig.add_trace(go.Scatter(
-    x=df["Horario"], y=df["Acumulado_ton"],
-    mode="lines", name="Acumulado (ton)", fill="tozeroy",
-    fillcolor="rgba(148,103,189,0.3)", line=dict(color="#9467bd", width=3),
-    hovertemplate="%{y:.1f} t"
+# Chegada
+fig.add_trace(go.Bar(
+    x=df["Horario"], y=df["Chegada_ton"],
+    name="Chegada (ton)", marker_color="#2ca02c"
 ))
 
+# Saída
+fig.add_trace(go.Bar(
+    x=df["Horario"], y=-df["Saida_ton"],
+    name="Saída (ton)", marker_color="#d62728"
+))
+
+# Acumulado
 fig.add_trace(go.Scatter(
-    x=df["Horario"], y=df["Funcionarios"],
-    mode="lines+markers", name="Funcionários",
-    line=dict(color="#1f77b4", width=2, dash="dot"),
-    marker=dict(size=4),
-    hovertemplate="%{y} pessoas"
+    x=df["Horario"], y=df["Acumulado_ton"],
+    mode="lines", name="Acumulado (ton)",
+    fill="tozeroy", fillcolor="rgba(148,103,189,0.4)",
+    line=dict(color="#9467bd", width=3)
+))
+
+# Capacidade de processamento (linha)
+fig.add_trace(go.Scatter(
+    x=df["Horario"], y=df["Capacidade_ton_h"],
+    mode="lines", name="Processamento (ton/h)",
+    line=dict(color="#ff7f0e", width=3, dash="dash")
 ))
 
 if rotulos:
     for _, r in df.iterrows():
         if r["Chegada_ton"] > 0.1:
             fig.add_annotation(x=r["Horario"], y=r["Chegada_ton"],
-                               text=f"{r['Chegada_ton']:.1f}", font=dict(color="#90EE90", size=9),
-                               bgcolor="white", bordercolor="#90EE90", showarrow=False, yshift=10)
+                               text=f"+{r['Chegada_ton']:.1f}", font=dict(color="white", size=9),
+                               bgcolor="#2ca02c", showarrow=False, yshift=8)
         if r["Saida_ton"] > 0.1:
-            fig.add_annotation(x=r["Horario"], y=r["Saida_ton"],
-                               text=f"{r['Saida_ton']:.1f}", font=dict(color="#E74C3C", size=9),
-                               bgcolor="white", bordercolor="#E74C3C", showarrow=False, yshift=10)
+            fig.add_annotation(x=r["Horario"], y=-r["Saida_ton"],
+                               text=f"-{r['Saida_ton']:.1f}", font=dict(color="white", size=9),
+                               bgcolor="#d62728", showarrow=False, yshift=-8)
 
-max_y = max(df[["Acumulado_ton","Chegada_ton","Saida_ton"]].max()) * 1.15
-max_y = max(max_y, df["Funcionarios"].max() * 1.2)
+# Layout
+max_y = df[["Chegada_ton", "Acumulado_ton", "Capacidade_ton_h"]].max().max() * 1.2
+min_y = -df["Saida_ton"].max() * 1.2
 
 fig.update_layout(
-    title="Acumulado ≥ 0 | Produção × Funcionários",
+    title="Logística Real: Chegada → Acumulado → Processamento → Saída",
     xaxis_title="Horário",
-    yaxis=dict(title="Toneladas (ou pessoas)", range=[0, max_y]),
-    barmode="stack",
+    yaxis=dict(title="Toneladas", range=[min_y, max_y]),
+    barmode="relative",
     hovermode="x unified",
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     height=700,
@@ -382,16 +405,26 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 # =============================================
+# MÉTRICAS
+# =============================================
+st.markdown("### Métricas Operacionais")
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("Total Chegada", f"{df['Chegada_ton'].sum():.1f} ton")
+col2.metric("Total Saída", f"{df['Saida_ton'].sum():.1f} ton")
+col3.metric("Acumulado Final", f"{df['Acumulado_ton'].iloc[-1]:.1f} ton")
+col4.metric("Produtividade Média", f"{(df['Capacidade_kg_h'].mean()/1000):.1f} ton/h")
+
+# =============================================
 # UPLOADS
 # =============================================
 st.markdown("### Upload de Arquivos")
 cols = st.columns(4)
 with cols[0]:
-    up = st.file_uploader("Chegadas", ["txt","csv","xlsx"], key="c")
+    up = st.file_uploader("Chegadas (ton)", ["txt","csv","xlsx"], key="c")
     if up: st.session_state.chegadas_bytes, st.session_state.chegadas_name = up.getvalue(), up.name
     if st.session_state.chegadas_name: st.success(st.session_state.chegadas_name)
 with cols[1]:
-    up = st.file_uploader("Saídas", ["txt","csv","xlsx"], key="s")
+    up = st.file_uploader("Saídas (ton)", ["txt","csv","xlsx"], key="s")
     if up: st.session_state.saidas_bytes, st.session_state.saidas_name = up.getvalue(), up.name
     if st.session_state.saidas_name: st.success(st.session_state.saidas_name)
 with cols[2]:
@@ -404,14 +437,15 @@ with cols[3]:
     if st.session_state.aux_name: st.success(st.session_state.aux_name)
 
 # =============================================
-# TABELA + DOWNLOAD
+# TABELA
 # =============================================
-with st.expander("Tabela Completa (Acumulado ≥ 0)"):
+with st.expander("Tabela Completa"):
     df_disp = df.copy()
     st.dataframe(df_disp.style.format({
         "Chegada_ton": "{:.1f}",
         "Saida_ton": "{:.1f}",
-        "Acumulado_ton": "{:.1f}"
+        "Acumulado_ton": "{:.1f}",
+        "Capacidade_ton_h": "{:.1f}"
     }), use_container_width=True)
     csv = df.to_csv(index=False).encode()
-    st.download_button("Baixar CSV", csv, "dados_acumulado_nao_negativo.csv", "text/csv")
+    st.download_button("Baixar CSV", csv, "logistica_real.csv", "text/csv")
