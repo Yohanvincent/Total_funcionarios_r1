@@ -8,7 +8,7 @@ import io
 # CONFIGURAÇÃO
 # =============================================
 st.set_page_config(layout="wide", page_title="Acumulado x Produção")
-st.title("📦 Produção × Acumulado × Funcionários (Acumulado Corrigido)")
+st.title("📦 Produção × Acumulado × Funcionários (Acumulado ≥ 0)")
 
 rotulos = st.checkbox("Exibir rótulos", True)
 
@@ -252,8 +252,7 @@ def extrair_movimentos(texto):
         p = l.strip().split()
         if len(p) >= 2:
             h, v = p[0], p[1].replace(",", ".")
-            try:
-                d[h] = d.get(h, 0) + float(v)
+            try: d[h] = d.get(h, 0) + float(v)
             except: pass
     return d
 
@@ -279,7 +278,7 @@ cheg = extrair_movimentos(chegadas_txt)
 said = extrair_movimentos(saidas_txt)
 
 # =============================================
-# TODAS AS HORAS ÚNICAS (ORDENADAS)
+# TODAS AS HORAS ÚNICAS
 # =============================================
 horas_set = set(cheg.keys()) | set(said.keys())
 for txt in [conf_txt, aux_txt]:
@@ -321,15 +320,15 @@ df = pd.DataFrame({
     "Funcionarios": func_total,
 })
 
-# ACUMULADO CORRETO: soma progressiva
-df["Acumulado_ton"] = (df["Chegada_ton"] - df["Saida_ton"]).cumsum().round(1)
+# ACUMULADO: NUNCA NEGATIVO
+df["Acumulado_ton"] = (df["Chegada_ton"] - df["Saida_ton"]).cumsum().clip(lower=0).round(1)
 
 # =============================================
-# TESTE DO SEU EXEMPLO
+# VALIDAÇÃO (seu exemplo)
 # =============================================
-st.write("### Validação do Acumulado (16:15 → 17:15)")
-teste = df[df["Horario"].isin(["16:15", "16:30", "17:15"])][["Horario", "Chegada_ton", "Saida_ton", "Acumulado_ton"]]
-st.dataframe(teste.style.format({"Chegada_ton": "{:.1f}", "Saida_ton": "{:.1f}", "Acumulado_ton": "{:.1f}"}))
+st.write("### Validação: Acumulado nunca negativo")
+val = df[df["Horario"].isin(["16:15", "16:30", "17:15", "18:00", "21:30"])][["Horario", "Chegada_ton", "Saida_ton", "Acumulado_ton"]]
+st.dataframe(val.style.format({"Chegada_ton": "{:.1f}", "Saida_ton": "{:.1f}", "Acumulado_ton": "{:.1f}"}))
 
 # =============================================
 # GRÁFICO
@@ -369,7 +368,7 @@ max_y = max(df[["Acumulado_ton","Chegada_ton","Saida_ton"]].max()) * 1.15
 max_y = max(max_y, df["Funcionarios"].max() * 1.2)
 
 fig.update_layout(
-    title="Produção × Acumulado (CORRETO) × Funcionários",
+    title="Acumulado ≥ 0 | Produção × Funcionários",
     xaxis_title="Horário",
     yaxis=dict(title="Toneladas (ou pessoas)", range=[0, max_y]),
     barmode="stack",
@@ -405,9 +404,14 @@ with cols[3]:
     if st.session_state.aux_name: st.success(st.session_state.aux_name)
 
 # =============================================
-# TABELA
+# TABELA + DOWNLOAD
 # =============================================
-with st.expander("Tabela Completa"):
-    st.dataframe(df.style.format({"Chegada_ton": "{:.1f}", "Saida_ton": "{:.1f}", "Acumulado_ton": "{:.1f}"}), use_container_width=True)
+with st.expander("Tabela Completa (Acumulado ≥ 0)"):
+    df_disp = df.copy()
+    st.dataframe(df_disp.style.format({
+        "Chegada_ton": "{:.1f}",
+        "Saida_ton": "{:.1f}",
+        "Acumulado_ton": "{:.1f}"
+    }), use_container_width=True)
     csv = df.to_csv(index=False).encode()
-    st.download_button("Baixar CSV", csv, "dados_acumulado_correto.csv", "text/csv")
+    st.download_button("Baixar CSV", csv, "dados_acumulado_nao_negativo.csv", "text/csv")
