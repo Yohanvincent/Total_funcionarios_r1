@@ -13,29 +13,25 @@ st.set_page_config(
 )
 
 # =============================================
-# AUTENTICAÇÃO (VERSÃO 0.2.3)
+# AUTENTICAÇÃO (COM .get() PARA EVITAR ERRO)
 # =============================================
 try:
     authenticator = stauth.Authenticate(
-        st.secrets["auth"]["names"],
-        st.secrets["auth"]["usernames"],
-        st.secrets["auth"]["passwords"],
-        "logistica_dashboard",  # cookie_name
-        "chave_muito_forte_123456789",  # key
-        7  # cookie_expiry_days
+        st.secrets["auth"].get("names", []),
+        st.secrets["auth"].get("usernames", []),
+        st.secrets["auth"].get("passwords", []),
+        "logistica_dashboard",
+        "chave_muito_forte_123456789",
+        7
     )
-except KeyError:
-    st.error("❌ **secrets.toml não encontrado ou mal formatado!**")
-    st.info("Vá em **Settings → Secrets** e adicione:")
+except Exception as e:
+    st.error("❌ Erro ao carregar autenticação. Verifique o secrets.toml.")
     st.code("""
 [auth]
 names = ["Admin Logística"]
 usernames = ["admin"]
 passwords = ["$2b$12$5uQ2z7W3k8Y9p0r1t2v3w4x6y7z8A9B0C1D2E3F4G5H6I7J8K9L0M"]
     """)
-    st.stop()
-except Exception as e:
-    st.error(f"Erro: {e}")
     st.stop()
 
 # =============================================
