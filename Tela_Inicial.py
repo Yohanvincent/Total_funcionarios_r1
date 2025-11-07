@@ -57,6 +57,16 @@ with col2:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
+    # Botão para Acumulado x Producão
+    if st.button(
+        "📶 Acumulado x Produção",
+        use_container_width=True,
+        key="btn_prod"
+    ):
+        st.switch_page("pages/Acumulado_x_Producao.py")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    
     # Botão para Produção vs Equipe
     if st.button(
         "📶 Produção x Equipe",
