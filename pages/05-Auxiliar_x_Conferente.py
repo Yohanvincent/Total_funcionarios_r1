@@ -1,7 +1,14 @@
 # pages/05-Auxiliar_x_Conferente.py
 # =============================================
 # OBJETIVO: Comparar disponibilidade de Conferentes vs Auxiliares
-# PRIORIDADE: 1. Colar → 2. Upload → 3. Padrão
+# LAYOUT (ORGANIZAÇÃO ORIGINAL):
+# 1. Título + Checkbox
+# 2. GRÁFICO (logo abaixo do título)
+# 3. Uploads
+# 4. Campos para colar
+# 5. Botão Baixar Excel
+# 6. Dados carregados (visualização)
+# 7. Explicação de formato
 # =============================================
 import streamlit as st
 import pandas as pd
@@ -12,11 +19,15 @@ import io
 # 1. CONFIGURAÇÃO DA PÁGINA
 # =============================================
 st.set_page_config(layout="wide")
+
+# =============================================
+# 2. TÍTULO + CHECKBOX + GRÁFICO (NO INÍCIO)
+# =============================================
 st.title("Disponibilidade: Auxiliares Carga/Descarga x Conferentes")
 rotulos = st.checkbox("Rótulos", True)
 
 # =============================================
-# 2. PERSISTÊNCIA (session_state)
+# 3. PERSISTÊNCIA (session_state)
 # =============================================
 # Para colagem
 if "jornada_conf" not in st.session_state:
@@ -30,7 +41,7 @@ for key in ["conf_bytes", "aux_bytes", "conf_name", "aux_name"]:
         st.session_state[key] = None
 
 # =============================================
-# 3. DADOS PADRÃO
+# 4. DADOS PADRÃO
 # =============================================
 padrao_conf = (
     "01:00 04:00 05:05 10:23 1\n"
@@ -56,65 +67,7 @@ padrao_aux = (
 )
 
 # =============================================
-# 4. CAMPOS PARA COLAR (PRIORIDADE 1)
-# =============================================
-st.markdown("### 1. Cole as jornadas (opcional – substitui upload/padrão)")
-
-col_a, col_b = st.columns(2)
-
-with col_a:
-    st.markdown("**Conferentes**")
-    jornada_conf = st.text_area(
-        "Cole aqui (opcional)",
-        value=st.session_state.jornada_conf,
-        height=250,
-        placeholder="01:00 04:00 05:05 10:23 1\n...",
-        key="input_conf"
-    )
-    if jornada_conf != st.session_state.jornada_conf:
-        st.session_state.jornada_conf = jornada_conf
-        st.success("Conferentes colados!")
-
-with col_b:
-    st.markdown("**Auxiliares**")
-    jornada_aux = st.text_area(
-        "Cole aqui (opcional)",
-        value=st.session_state.jornada_aux,
-        height=250,
-        placeholder="16:00 20:00 21:05 01:24 5\n...",
-        key="input_aux"
-    )
-    if jornada_aux != st.session_state.jornada_aux:
-        st.session_state.jornada_aux = jornada_aux
-        st.success("Auxiliares colados!")
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-# =============================================
-# 5. UPLOAD (PRIORIDADE 2)
-# =============================================
-st.markdown("### 2. Ou faça upload (Excel/CSV/TXT)")
-
-c1, c2 = st.columns(2)
-with c1:
-    up_conf = st.file_uploader("Conferentes", ["txt", "csv", "xlsx"], key="conf_uploader")
-    if up_conf:
-        st.session_state.conf_bytes = up_conf.getvalue()
-        st.session_state.conf_name = up_conf.name
-    if st.session_state.conf_name:
-        st.success(f"Conferentes: **{st.session_state.conf_name}**")
-with c2:
-    up_aux = st.file_uploader("Auxiliares", ["txt", "csv", "xlsx"], key="aux_uploader")
-    if up_aux:
-        st.session_state.aux_bytes = up_aux.getvalue()
-        st.session_state.aux_name = up_aux.name
-    if st.session_state.aux_name:
-        st.success(f"Auxiliares: **{st.session_state.aux_name}**")
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-# =============================================
-# 6. FUNÇÃO: LER DADOS COM PRIORIDADE
+# 5. FUNÇÃO: LER DADOS COM PRIORIDADE
 # =============================================
 def ler_dados(prioridade_colar, prioridade_upload, fallback):
     if prioridade_colar.strip():
@@ -131,7 +84,7 @@ jc = ler_dados(st.session_state.jornada_conf, st.session_state.conf_bytes, padra
 ja = ler_dados(st.session_state.jornada_aux, st.session_state.aux_bytes, padrao_aux)
 
 # =============================================
-# 7. FUNÇÕES AUXILIARES (mantidas)
+# 6. FUNÇÕES AUXILIARES
 # =============================================
 def minutos(h):
     try:
@@ -151,7 +104,7 @@ def extrair_jornadas(texto):
     return jornadas
 
 # =============================================
-# 8. TIMELINE + CONTAGEM (igual ao original)
+# 7. COLETAR HORÁRIOS + TIMELINE
 # =============================================
 horas_set = set()
 max_min = 0
@@ -188,6 +141,9 @@ for h in todos_horarios:
 horarios = [h for _, h in sorted(zip(timeline_min, todos_horarios))]
 timeline_min = sorted(timeline_min)
 
+# =============================================
+# 8. CONTAGEM DE FUNCIONÁRIOS
+# =============================================
 conf = [0] * len(timeline_min)
 aux = [0] * len(timeline_min)
 
@@ -217,6 +173,9 @@ for j in extrair_jornadas(ja):
 conf = [int(x) for x in conf]
 aux = [int(x) for x in aux]
 
+# =============================================
+# 9. DATAFRAME
+# =============================================
 df = pd.DataFrame({
     "Horario": horarios,
     "Conferentes": conf,
@@ -224,7 +183,7 @@ df = pd.DataFrame({
 })
 
 # =============================================
-# 9. GRÁFICO (igual ao original)
+# 10. GRÁFICO (LOGO APÓS TÍTULO)
 # =============================================
 fig = go.Figure()
 fig.add_trace(go.Scatter(
@@ -255,17 +214,76 @@ fig.update_layout(title="", xaxis_title="Horário", yaxis_title="Pessoas", heigh
 st.plotly_chart(fig, use_container_width=True)
 
 # =============================================
-# 10. BAIXAR EXCEL
+# 11. UPLOADS (ABAIXO DO GRÁFICO)
+# =============================================
+st.markdown("**Upload (Excel/CSV/TXT) ou use padrão.**")
+c1, c2 = st.columns(2)
+with c1:
+    up_conf = st.file_uploader("Conferentes", ["txt", "csv", "xlsx"], key="conf_uploader")
+    if up_conf:
+        st.session_state.conf_bytes = up_conf.getvalue()
+        st.session_state.conf_name = up_conf.name
+    if st.session_state.conf_name:
+        st.success(f"Conferentes: **{st.session_state.conf_name}**")
+with c2:
+    up_aux = st.file_uploader("Auxiliares", ["txt", "csv", "xlsx"], key="aux_uploader")
+    if up_aux:
+        st.session_state.aux_bytes = up_aux.getvalue()
+        st.session_state.aux_name = up_aux.name
+    if st.session_state.aux_name:
+        st.success(f"Auxiliares: **{st.session_state.aux_name}**")
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+# =============================================
+# 12. CAMPOS PARA COLAR (DEPOIS DO UPLOAD)
+# =============================================
+st.markdown("### Ou cole os dados diretamente (substitui upload/padrão)")
+
+col_a, col_b = st.columns(2)
+
+with col_a:
+    st.markdown("**Conferentes**")
+    jornada_conf = st.text_area(
+        "Cole aqui",
+        value=st.session_state.jornada_conf,
+        height=250,
+        placeholder="01:00 04:00 05:05 10:23 1\n...",
+        key="input_conf"
+    )
+    if jornada_conf != st.session_state.jornada_conf:
+        st.session_state.jornada_conf = jornada_conf
+        st.success("Conferentes colados! Gráfico atualizado.")
+
+with col_b:
+    st.markdown("**Auxiliares**")
+    jornada_aux = st.text_area(
+        "Cole aqui",
+        value=st.session_state.jornada_aux,
+        height=250,
+        placeholder="16:00 20:00 21:05 01:24 5\n...",
+        key="input_aux"
+    )
+    if jornada_aux != st.session_state.jornada_aux:
+        st.session_state.jornada_aux = jornada_aux
+        st.success("Auxiliares colados! Gráfico atualizado.")
+
+# =============================================
+# 13. BOTÃO BAIXAR EXCEL
 # =============================================
 output = io.BytesIO()
 with pd.ExcelWriter(output, engine="openpyxl") as writer:
     df.to_excel(writer, index=False)
 output.seek(0)
-st.download_button("Baixar Excel", output, "equipe_disponibilidade.xlsx",
-                   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+st.download_button(
+    "Baixar Excel",
+    output,
+    "equipe_disponibilidade.xlsx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
 
 # =============================================
-# 11. VISUALIZAÇÃO DOS DADOS USADOS
+# 14. VISUALIZAÇÃO DOS DADOS USADOS
 # =============================================
 st.markdown("### Dados utilizados")
 col1, col2 = st.columns(2)
@@ -277,13 +295,13 @@ with col2:
     st.code(ja, language="text")
 
 # =============================================
-# 12. EXPLICAÇÃO
+# 15. EXPLICAÇÃO DE FORMATO
 # =============================================
-with st.expander("Como usar"):
+with st.expander("Como preparar os dados"):
     st.markdown(
         "### Prioridade: 1. Colar → 2. Upload → 3. Padrão\n\n"
         "- **Cole** nos campos acima (mais rápido)\n"
         "- **Ou faça upload** de arquivos\n"
         "- **Se nada for feito**, usa o padrão\n\n"
-        "> **Dica:** Cole → Gráfico atualiza na hora!"
+        "> **Dica:** Cole → Gráfico atualiza automaticamente!"
     )
