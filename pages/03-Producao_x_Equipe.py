@@ -3,6 +3,14 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import io
+from utils.auth import get_authenticator
+
+# === PROTEÇÃO ===
+authenticator = get_authenticator()
+name, authentication_status, username = authenticator.login("Login", "sidebar")
+
+if not authentication_status:
+    st.stop()  # PARA A EXECUÇÃO
 
 st.set_page_config(layout="wide")
 st.title("Produção vs Equipe Disponível")
