@@ -61,7 +61,7 @@ with col2:
     if st.button(
         "📶 Acumulado x Produção",
         use_container_width=True,
-        key="btn_prod"
+        key="btn_acum"
     ):
         st.switch_page("pages/Acumulado_x_Producao.py")
 
