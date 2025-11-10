@@ -14,7 +14,7 @@ st.set_page_config(
 )
 
 # =============================================
-# AUTENTICAÇÃO DIRETA
+# AUTENTICAÇÃO
 # =============================================
 try:
     names = st.secrets["auth"]["names"]
@@ -25,7 +25,6 @@ try:
     for u, n, p in zip(usernames, names, passwords):
         credentials["usernames"][u.lower()] = {"name": n, "password": p}
 except:
-    st.warning("Modo teste ativo")
     credentials = {
         "usernames": {
             "admin": {
@@ -43,30 +42,38 @@ authenticator = stauth.Authenticate(
 )
 
 # =============================================
-# LOGIN + FORÇA RERUN
+# LOGIN
 # =============================================
 name, authentication_status, username = authenticator.login("Login", "main")
 
+# =============================================
+# LOGIN BEM-SUCEDIDO → FORÇA RECARREGAMENTO
+# =============================================
 if authentication_status:
-    # FORÇA RECARREGAMENTO APÓS LOGIN
     st.session_state["logged_in"] = True
-    st.experimental_rerun()
+    st.session_state["user_name"] = name
+    st.rerun()  # ← ESSA LINHA É OBRIGATÓRIA
 
+# =============================================
+# LOGIN FALHOU
+# =============================================
 if authentication_status == False:
     st.error("Usuário ou senha incorretos")
 elif authentication_status is None:
     st.warning("Por favor, insira suas credenciais")
 
 # =============================================
-# CONTEÚDO LOGADO (SÓ EXECUTA APÓS RERUN)
+# CONTEÚDO LOGADO (SÓ APARECE APÓS RERUN)
 # =============================================
 if st.session_state.get("logged_in", False):
+    # Sidebar com logout
     with st.sidebar:
-        st.success(f"Olá, **{name}**!")
+        st.success(f"Olá, **{st.session_state['user_name']}**!")
         if st.button("Sair"):
-            st.session_state["logged_in"] = False
-            st.experimental_rerun()
+            st.session_state.clear()
+            st.rerun()
 
+    # Título
     st.markdown(
         "<h1 style='text-align: center; margin-bottom: 50px;'>"
         "Dados Operacionais (Capacidade / Produtividade)"
@@ -74,27 +81,29 @@ if st.session_state.get("logged_in", False):
         unsafe_allow_html=True
     )
 
+    # Botões centralizados
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
-        if st.button("📶 Acumulado x Produção", use_container_width=True, key="btn_acum"):
+        if st.button("📶 Acumulado x Produção", use_container_width=True):
             st.switch_page("pages/01-Acumulado_x_Producao.py")
         st.markdown("<br>", unsafe_allow_html=True)
 
-        if st.button("📊 Capacidade x Produção", use_container_width=True, key="btn_cap"):
+        if st.button("📊 Capacidade x Produção", use_container_width=True):
             st.switch_page("pages/02-Capacidade_x_Producao.py")
         st.markdown("<br>", unsafe_allow_html=True)
 
-        if st.button("📶 Produção x Equipe", use_container_width=True, key="btn_prod"):
+        if st.button("📶 Produção x Equipe", use_container_width=True):
             st.switch_page("pages/03-Producao_x_Equipe.py")
         st.markdown("<br>", unsafe_allow_html=True)
 
-        if st.button("🧮 Total de Colaboradores", use_container_width=True, key="btn_total"):
+        if st.button("🧮 Total de Colaboradores", use_container_width=True):
             st.switch_page("pages/04-Total_Funcionarios.py")
         st.markdown("<br>", unsafe_allow_html=True)
 
-        if st.button("👷👷‍♀️ Auxiliares de Carga/Descarga x Conferentes", use_container_width=True, key="btn_aux"):
+        if st.button("👷👷‍♀️ Auxiliares de Carga/Descarga x Conferentes", use_container_width=True):
             st.switch_page("pages/05-Auxiliar_x_Conferente.py")
 
+    # Rodapé
     st.markdown(
         "<hr style='margin-top: 80px;'>"
         "<p style='text-align: center; color: gray; font-size: 0.9em;'>"
