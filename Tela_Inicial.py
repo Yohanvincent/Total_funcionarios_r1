@@ -1,6 +1,6 @@
 # Tela_Inicial.py
 import streamlit as st
-from authenticate import get_authenticator
+import streamlit_authenticator as stauth
 
 # =============================================
 # CONFIGURAÇÃO
@@ -14,9 +14,30 @@ st.set_page_config(
 )
 
 # =============================================
-# AUTENTICADOR
+# AUTENTICAÇÃO DIRETA (SIMPLIFICADA)
 # =============================================
-authenticator = get_authenticator()
+try:
+    # Carrega do secrets.toml
+    names = st.secrets["auth"]["names"]
+    usernames = st.secrets["auth"]["usernames"]
+    passwords = st.secrets["auth"]["passwords"]
+except:
+    # Modo teste
+    names = ["Admin Logística"]
+    usernames = ["admin"]
+    passwords = ["logistica123"]
+
+# Cria credentials dict (OBRIGATÓRIO)
+credentials = {"usernames": {}}
+for u, n, p in zip(usernames, names, passwords):
+    credentials["usernames"][u.lower()] = {"name": n, "password": p}
+
+authenticator = stauth.Authenticate(
+    credentials,
+    "logistica_dashboard",
+    "chave_forte_123",
+    cookie_expiry_days=7
+)
 
 # =============================================
 # LOGIN VISÍVEL
@@ -24,12 +45,12 @@ authenticator = get_authenticator()
 name, authentication_status, username = authenticator.login('Login', 'main')
 
 if authentication_status:
-    # SALVA NO SESSION STATE
+    # Salva no session state
     st.session_state.authentication_status = True
     st.session_state.name = name
     st.session_state.username = username
 
-    # LOGOUT NA SIDEBAR
+    # Logout na sidebar
     with st.sidebar:
         st.success(f"Olá, **{name}**!")
         authenticator.logout("Sair", "sidebar")
@@ -45,23 +66,23 @@ if authentication_status:
     # 5 BOTÕES CENTRALIZADOS
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
-        if st.button("📶 Acumulado x Produção", use_container_width=True, key="btn_acum"):
+        if st.button("📶 Acumulado x Produção", use_container_width=True):
             st.switch_page("pages/01-Acumulado_x_Producao.py")
         st.markdown("<br>", unsafe_allow_html=True)
 
-        if st.button("📊 Capacidade x Produção", use_container_width=True, key="btn_cap"):
+        if st.button("📊 Capacidade x Produção", use_container_width=True):
             st.switch_page("pages/02-Capacidade_x_Producao.py")
         st.markdown("<br>", unsafe_allow_html=True)
 
-        if st.button("📶 Produção x Equipe", use_container_width=True, key="btn_prod"):
+        if st.button("📶 Produção x Equipe", use_container_width=True):
             st.switch_page("pages/03-Producao_x_Equipe.py")
         st.markdown("<br>", unsafe_allow_html=True)
 
-        if st.button("🧮 Total de Colaboradores", use_container_width=True, key="btn_total"):
+        if st.button("🧮 Total de Colaboradores", use_container_width=True):
             st.switch_page("pages/04-Total_Funcionarios.py")
         st.markdown("<br>", unsafe_allow_html=True)
 
-        if st.button("👷👷‍♀️ Auxiliares de Carga/Descarga x Conferentes", use_container_width=True, key="btn_aux"):
+        if st.button("👷👷‍♀️ Auxiliares de Carga/Descarga x Conferentes", use_container_width=True):
             st.switch_page("pages/05-Auxiliar_x_Conferente.py")
 
     # RODAPÉ
