@@ -20,7 +20,6 @@ try:
     names = st.secrets["auth"]["names"]
     usernames = st.secrets["auth"]["usernames"]
     passwords = st.secrets["auth"]["passwords"]
-
     credentials = {"usernames": {}}
     for u, n, p in zip(usernames, names, passwords):
         credentials["usernames"][u.lower()] = {"name": n, "password": p}
@@ -46,13 +45,17 @@ authenticator = stauth.Authenticate(
 # =============================================
 name, authentication_status, username = authenticator.login("Login", "main")
 
+# GARANTA QUE name ESTÁ DEFINIDO ANTES DE USAR
+if "user_name" not in st.session_state:
+    st.session_state.user_name = None
+
 # =============================================
 # LOGIN BEM-SUCEDIDO → FORÇA RECARREGAMENTO
 # =============================================
 if authentication_status:
     st.session_state["logged_in"] = True
     st.session_state["user_name"] = name
-    st.rerun()  # ← ESSA LINHA É OBRIGATÓRIA
+    st.rerun()  # ← AGORA É SEGURO
 
 # =============================================
 # LOGIN FALHOU
@@ -84,23 +87,23 @@ if st.session_state.get("logged_in", False):
     # Botões centralizados
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
-        if st.button("📶 Acumulado x Produção", use_container_width=True):
+        if st.button("📶 Acumulado x Produção", use_container_width=True, key="btn1"):
             st.switch_page("pages/01-Acumulado_x_Producao.py")
         st.markdown("<br>", unsafe_allow_html=True)
 
-        if st.button("📊 Capacidade x Produção", use_container_width=True):
+        if st.button("📊 Capacidade x Produção", use_container_width=True, key="btn2"):
             st.switch_page("pages/02-Capacidade_x_Producao.py")
         st.markdown("<br>", unsafe_allow_html=True)
 
-        if st.button("📶 Produção x Equipe", use_container_width=True):
+        if st.button("📶 Produção x Equipe", use_container_width=True, key="btn3"):
             st.switch_page("pages/03-Producao_x_Equipe.py")
         st.markdown("<br>", unsafe_allow_html=True)
 
-        if st.button("🧮 Total de Colaboradores", use_container_width=True):
+        if st.button("🧮 Total de Colaboradores", use_container_width=True, key="btn4"):
             st.switch_page("pages/04-Total_Funcionarios.py")
         st.markdown("<br>", unsafe_allow_html=True)
 
-        if st.button("👷👷‍♀️ Auxiliares de Carga/Descarga x Conferentes", use_container_width=True):
+        if st.button("👷👷‍♀️ Auxiliares de Carga/Descarga x Conferentes", use_container_width=True, key="btn5"):
             st.switch_page("pages/05-Auxiliar_x_Conferente.py")
 
     # Rodapé
