@@ -48,27 +48,20 @@ if "logged_in" not in st.session_state:
     st.session_state.user_name = None
 
 # =============================================
-# FORMULÁRIO DE LOGIN (USANDO authenticator.login COM FORM)
+# TELA DE LOGIN (USANDO authenticator.login PADRÃO)
 # =============================================
 if not st.session_state.logged_in:
-    with st.form("login_form"):
-        st.subheader("Login Seguro")
-        username = st.text_input("Usuário")
-        password = st.text_input("Senha", type="password")
-        submit = st.form_submit_button("Entrar")
+    # Mostra o login padrão
+    name, authentication_status, username = authenticator.login("Login", "main")
 
-        if submit:
-            # Usa o authenticator.login com campos preenchidos
-            name, authentication_status, _ = authenticator.login(username, password, "main")
-            if authentication_status:
-                st.session_state.logged_in = True
-                st.session_state.user_name = name
-                st.success("Login realizado com sucesso!")
-                st.rerun()
-            elif authentication_status == False:
-                st.error("Usuário ou senha incorretos")
-            else:
-                st.warning("Preencha os campos")
+    if authentication_status:
+        st.session_state.logged_in = True
+        st.session_state.user_name = name
+        st.rerun()  # Força recarregamento
+    elif authentication_status == False:
+        st.error("Usuário ou senha incorretos")
+    elif authentication_status is None:
+        st.warning("Por favor, insira suas credenciais")
 
 # =============================================
 # CONTEÚDO LOGADO
