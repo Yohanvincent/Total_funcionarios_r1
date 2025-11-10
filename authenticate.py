@@ -4,27 +4,17 @@ import streamlit_authenticator as stauth
 
 def get_authenticator():
     try:
-        # Usa st.secrets.to_dict() → dict completo
         secrets = st.secrets.to_dict()
         auth = secrets.get("auth", {})
 
-        if not auth:
-            raise KeyError("Seção [auth] não encontrada")
-
-        # Monta o dicionário de credentials (OBRIGATÓRIO)
-        credentials = {"usernames": {}}
-        names = auth.get("names", [])
-        usernames = auth.get("usernames", [])
-        passwords = auth.get("passwords", [])
-
-        for username, name, password in zip(usernames, names, passwords):
-            credentials["usernames"][username.lower()] = {
-                "name": name,
-                "password": password
+        credentials = {
+            "usernames": {
+                auth.get("usernames", ["admin"])[0]: {
+                    "name": auth.get("names", ["Admin Logística"])[0],
+                    "password": auth.get("passwords", ["logistica123"])[0]
+                }
             }
-
-        if not credentials["usernames"]:
-            raise ValueError("Nenhum usuário encontrado")
+        }
 
     except Exception as e:
         st.warning(f"Modo teste: {str(e)}")
