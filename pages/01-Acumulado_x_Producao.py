@@ -3,59 +3,20 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import io
-import streamlit_authenticator as stauth
 
-# =============================================
-# AUTENTICAÇÃO DIRETA (SIMPLIFICADA)
-# =============================================
-try:
-    names = st.secrets["auth"]["names"]
-    usernames = st.secrets["auth"]["usernames"]
-    passwords = st.secrets["auth"]["passwords"]
-except:
-    names = ["Admin Logística"]
-    usernames = ["admin"]
-    passwords = ["logistica123"]
-
-credentials = {"usernames": {}}
-for u, n, p in zip(usernames, names, passwords):
-    credentials["usernames"][u.lower()] = {"name": n, "password": p}
-
-authenticator = stauth.Authenticate(
-    credentials,
-    "logistica_dashboard",
-    "chave_forte_123",
-    cookie_expiry_days=7
-)
-
-# LOGIN INVISÍVEL
-authenticator.login('Login', 'main', prefilled=True)
-
-# VERIFICA LOGIN
-if st.session_state.get("authentication_status"):
-    with st.sidebar:
-        st.success(f"Olá, **{st.session_state.name}**!")
-        authenticator.logout("Sair", "sidebar")
-else:
-    st.error("Faça login na página inicial.")
-    st.stop()
-# =============================================
-# CONFIGURAÇÃO DA PÁGINA
-# =============================================
 st.set_page_config(layout="wide", page_title="📊 Acumulado x Produção - CD")
 st.title("📊 Acumulado x Produção - CD")
 
 # =============================================
-# CONFIGURAÇÕES NA SIDEBAR
+# CONFIGURAÇÕES
 # =============================================
 st.sidebar.header("Tempos de Operação (segundos)")
 t_descarga = st.sidebar.number_input("Descarga (Auxiliar)", value=30, min_value=1)
 t_carga = st.sidebar.number_input("Carga (Conferente)", value=28, min_value=1)
 fator_kg_vol = st.sidebar.number_input("1 vol = ? kg", value=16.10, min_value=0.1, step=0.1, format="%.2f")
 
-# Produtividade por pessoa (ton/h)
-prod_descarga = (3600 / t_descarga) * fator_kg_vol / 1000  # ton/h por auxiliar
-prod_carga = (3600 / t_carga) * fator_kg_vol / 1000       # ton/h por conferente
+prod_descarga = (3600 / t_descarga) * fator_kg_vol / 1000
+prod_carga = (3600 / t_carga) * fator_kg_vol / 1000
 
 st.sidebar.markdown("### Produtividade por Pessoa")
 st.sidebar.metric("Auxiliar (descarga)", f"{prod_descarga*1000:,.0f} kg/h")
@@ -65,10 +26,9 @@ escala_pessoas = st.sidebar.slider("Escala visual pessoas (ton/pessoa)", 1.0, 10
 rotulos = st.sidebar.checkbox("Exibir rótulos", True)
 
 # =============================================
-# SESSION STATE (UPLOADS)
+# SESSION STATE
 # =============================================
-keys = ["chegadas_bytes", "saidas_bytes", "conf_bytes", "aux_bytes",
-        "chegadas_name", "saidas_name", "conf_name", "aux_name"]
+keys = ["chegadas_bytes", "saidas_bytes", "conf_bytes", "aux_bytes"]
 for k in keys:
     if k not in st.session_state:
         st.session_state[k] = None
