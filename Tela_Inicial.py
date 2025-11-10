@@ -41,40 +41,45 @@ authenticator = stauth.Authenticate(
 )
 
 # =============================================
-# LOGIN
+# INICIALIZA SESSION STATE
 # =============================================
-name, authentication_status, username = authenticator.login("Login", "main")
-
-# GARANTA QUE name ESTÁ DEFINIDO ANTES DE USAR
-if "user_name" not in st.session_state:
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
     st.session_state.user_name = None
 
 # =============================================
-# LOGIN BEM-SUCEDIDO → FORÇA RECARREGAMENTO
+# FORMULÁRIO DE LOGIN
 # =============================================
-if authentication_status:
-    st.session_state["logged_in"] = True
-    st.session_state["user_name"] = name
-    st.rerun()  # ← AGORA É SEGURO
+if not st.session_state.logged_in:
+    with st.form("login_form"):
+        st.subheader("Login Seguro")
+        username = st.text_input("Usuário", value="admin")
+        password = st.text_input("Senha", type="password", value="logistica123")
+        submit = st.form_submit_button("Entrar")
+
+        if submit:
+            name, authentication_status, _ = authenticator.login(username, password)
+            if authentication_status:
+                st.session_state.logged_in = True
+                st.session_state.user_name = name
+                st.success("Login realizado com sucesso!")
+                st.experimental_rerun()
+            elif authentication_status == False:
+                st.error("Usuário ou senha incorretos")
+            else:
+                st.warning("Preencha os campos")
 
 # =============================================
-# LOGIN FALHOU
+# CONTEÚDO LOGADO
 # =============================================
-if authentication_status == False:
-    st.error("Usuário ou senha incorretos")
-elif authentication_status is None:
-    st.warning("Por favor, insira suas credenciais")
-
-# =============================================
-# CONTEÚDO LOGADO (SÓ APARECE APÓS RERUN)
-# =============================================
-if st.session_state.get("logged_in", False):
+else:
     # Sidebar com logout
     with st.sidebar:
-        st.success(f"Olá, **{st.session_state['user_name']}**!")
+        st.success(f"Olá, **{st.session_state.user_name}**!")
         if st.button("Sair"):
-            st.session_state.clear()
-            st.rerun()
+            st.session_state.logged_in = False
+            st.session_state.user_name = None
+            st.experimental_rerun()
 
     # Título
     st.markdown(
