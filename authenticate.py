@@ -4,30 +4,41 @@ import streamlit_authenticator as stauth
 
 def get_authenticator():
     try:
-        # CORREÇÃO FINAL: st.secrets.to_dict() → dict completo
-        secrets_dict = st.secrets.to_dict()
-        auth_config = secrets_dict.get("auth", {})
-        
-        if not auth_config:
-            raise KeyError("Seção 'auth' não encontrada")
-        
-        names = auth_config.get("names", [])
-        usernames = auth_config.get("usernames", [])
-        passwords = auth_config.get("passwords", [])
-        
-        if len(names) == 0 or len(usernames) == 0 or len(passwords) == 0:
-            raise ValueError("Listas de auth vazias")
-            
+        # Usa st.secrets.to_dict() → dict completo
+        secrets = st.secrets.to_dict()
+        auth = secrets.get("auth", {})
+
+        if not auth:
+            raise KeyError("Seção [auth] não encontrada")
+
+        # Monta o dicionário de credentials (OBRIGATÓRIO)
+        credentials = {"usernames": {}}
+        names = auth.get("names", [])
+        usernames = auth.get("usernames", [])
+        passwords = auth.get("passwords", [])
+
+        for username, name, password in zip(usernames, names, passwords):
+            credentials["usernames"][username.lower()] = {
+                "name": name,
+                "password": password
+            }
+
+        if not credentials["usernames"]:
+            raise ValueError("Nenhum usuário encontrado")
+
     except Exception as e:
-        st.warning(f"Modo teste ativo: {str(e)}")
-        names = ["Admin Logística"]
-        usernames = ["admin"]
-        passwords = ["logistica123"]  # TEXTO CLARO
+        st.warning(f"Modo teste: {str(e)}")
+        credentials = {
+            "usernames": {
+                "admin": {
+                    "name": "Admin Logística",
+                    "password": "logistica123"
+                }
+            }
+        }
 
     return stauth.Authenticate(
-        names,
-        usernames,
-        passwords,
+        credentials,
         "logistica_dashboard",
         "chave_forte_123",
         cookie_expiry_days=7
