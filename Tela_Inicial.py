@@ -1,6 +1,6 @@
 # Tela_Inicial.py
 import streamlit as st
-import streamlit_authenticator as stauth
+from authenticate import get_authenticator
 
 # =============================================
 # CONFIGURAÇÃO
@@ -14,68 +14,27 @@ st.set_page_config(
 )
 
 # =============================================
-# AUTENTICAÇÃO
+# AUTENTICADOR
 # =============================================
-try:
-    names = st.secrets["auth"]["names"]
-    usernames = st.secrets["auth"]["usernames"]
-    passwords = st.secrets["auth"]["passwords"]
-    credentials = {"usernames": {}}
-    for u, n, p in zip(usernames, names, passwords):
-        credentials["usernames"][u.lower()] = {"name": n, "password": p}
-except:
-    credentials = {
-        "usernames": {
-            "admin": {
-                "name": "Admin Logística",
-                "password": "$2b$12$5uQ2z7W3k8Y9p0r1t2v3w4x6y7z8A9B0C1D2E3F4G5H6I7J8K9L0M"
-            }
-        }
-    }
-
-authenticator = stauth.Authenticate(
-    credentials,
-    "logistica_dashboard",
-    "chave_forte_123",
-    cookie_expiry_days=7
-)
+authenticator = get_authenticator()
 
 # =============================================
-# INICIALIZA SESSION STATE
+# LOGIN VISÍVEL
 # =============================================
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-    st.session_state.user_name = None
+name, authentication_status, username = authenticator.login('Login', 'main')
 
-# =============================================
-# TELA DE LOGIN (USANDO authenticator.login PADRÃO)
-# =============================================
-if not st.session_state.logged_in:
-    # Mostra o login padrão
-    name, authentication_status, username = authenticator.login("Login", "main")
+if authentication_status:
+    # SALVA NO SESSION STATE
+    st.session_state.authentication_status = True
+    st.session_state.name = name
+    st.session_state.username = username
 
-    if authentication_status:
-        st.session_state.logged_in = True
-        st.session_state.user_name = name
-        st.rerun()  # Força recarregamento
-    elif authentication_status == False:
-        st.error("Usuário ou senha incorretos")
-    elif authentication_status is None:
-        st.warning("Por favor, insira suas credenciais")
-
-# =============================================
-# CONTEÚDO LOGADO
-# =============================================
-else:
-    # Sidebar com logout
+    # LOGOUT NA SIDEBAR
     with st.sidebar:
-        st.success(f"Olá, **{st.session_state.user_name}**!")
-        if st.button("Sair"):
-            st.session_state.logged_in = False
-            st.session_state.user_name = None
-            st.rerun()
+        st.success(f"Olá, **{name}**!")
+        authenticator.logout("Sair", "sidebar")
 
-    # Título
+    # TÍTULO
     st.markdown(
         "<h1 style='text-align: center; margin-bottom: 50px;'>"
         "Dados Operacionais (Capacidade / Produtividade)"
@@ -83,29 +42,29 @@ else:
         unsafe_allow_html=True
     )
 
-    # Botões centralizados
+    # 5 BOTÕES CENTRALIZADOS
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
-        if st.button("📶 Acumulado x Produção", use_container_width=True, key="btn1"):
+        if st.button("📶 Acumulado x Produção", use_container_width=True, key="btn_acum"):
             st.switch_page("pages/01-Acumulado_x_Producao.py")
         st.markdown("<br>", unsafe_allow_html=True)
 
-        if st.button("📊 Capacidade x Produção", use_container_width=True, key="btn2"):
+        if st.button("📊 Capacidade x Produção", use_container_width=True, key="btn_cap"):
             st.switch_page("pages/02-Capacidade_x_Producao.py")
         st.markdown("<br>", unsafe_allow_html=True)
 
-        if st.button("📶 Produção x Equipe", use_container_width=True, key="btn3"):
+        if st.button("📶 Produção x Equipe", use_container_width=True, key="btn_prod"):
             st.switch_page("pages/03-Producao_x_Equipe.py")
         st.markdown("<br>", unsafe_allow_html=True)
 
-        if st.button("🧮 Total de Colaboradores", use_container_width=True, key="btn4"):
+        if st.button("🧮 Total de Colaboradores", use_container_width=True, key="btn_total"):
             st.switch_page("pages/04-Total_Funcionarios.py")
         st.markdown("<br>", unsafe_allow_html=True)
 
-        if st.button("👷👷‍♀️ Auxiliares de Carga/Descarga x Conferentes", use_container_width=True, key="btn5"):
+        if st.button("👷👷‍♀️ Auxiliares de Carga/Descarga x Conferentes", use_container_width=True, key="btn_aux"):
             st.switch_page("pages/05-Auxiliar_x_Conferente.py")
 
-    # Rodapé
+    # RODAPÉ
     st.markdown(
         "<hr style='margin-top: 80px;'>"
         "<p style='text-align: center; color: gray; font-size: 0.9em;'>"
@@ -113,3 +72,8 @@ else:
         "</p>",
         unsafe_allow_html=True
     )
+
+elif authentication_status == False:
+    st.error("Usuário ou senha incorretos")
+elif authentication_status is None:
+    st.warning("Por favor, insira suas credenciais")
