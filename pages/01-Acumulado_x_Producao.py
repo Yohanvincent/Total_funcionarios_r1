@@ -1,58 +1,55 @@
-# pages/Logistica_Real.py
+# pages/01-Acumulado_x_Producao.py
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import io
-import streamlit_authenticator as stauth
+from authenticate import get_authenticator  # ← IMPORTA O AUTHENTICATOR
 
-# === AUTENTICAÇÃO DIRETA (MESMO CÓDIGO DA TELA INICIAL) ===
-try:
-    names = st.secrets["auth"]["names"]
-    usernames = st.secrets["auth"]["usernames"]
-    passwords = st.secrets["auth"]["passwords"]
-    credentials = {"usernames": {}}
-    for u, n, p in zip(usernames, names, passwords):
-        credentials["usernames"][u.lower()] = {"name": n, "password": p}
-except:
-    credentials = {"usernames": {"admin": {"name": "Admin", "password": "$2b$12$5uQ2z7W3k8Y9p0r1t2v3w4x6y7z8A9B0C1D2E3F4G5H6I7J8K9L0M"}}}
+# =============================================
+# AUTENTICAÇÃO (LOGIN INVISÍVEL + PROTEÇÃO)
+# =============================================
+authenticator = get_authenticator()
 
-authenticator = stauth.Authenticate(credentials, "logistica_dashboard", "chave_forte_123", 7)
-name, authentication_status, username = authenticator.login("Login", "sidebar")
+# LOGIN INVISÍVEL (mantém o cookie ativo)
+authenticator.login('Login', 'main', prefilled=True)
 
-if not authentication_status:
+# VERIFICA SE ESTÁ LOGADO
+if not st.session_state.get("authentication_status"):
+    st.error("Faça login na página inicial.")
     st.stop()
 
+# LOGOUT NA SIDEBAR
 with st.sidebar:
-    st.success(f"Olá, {name}")
+    st.success(f"Olá, **{st.session_state.name}**!")
     authenticator.logout("Sair", "sidebar")
+
 # =============================================
-# CONFIGURAÇÃO
+# CONFIGURAÇÃO DA PÁGINA
 # =============================================
-st.set_page_config(layout="wide", page_title="📊 Acumulado x Produção - CD ")
+st.set_page_config(layout="wide", page_title="📊 Acumulado x Produção - CD")
 st.title("📊 Acumulado x Produção - CD")
 
 # =============================================
-# CONFIGURAÇÕES
+# CONFIGURAÇÕES NA SIDEBAR
 # =============================================
 st.sidebar.header("Tempos de Operação (segundos)")
 t_descarga = st.sidebar.number_input("Descarga (Auxiliar)", value=30, min_value=1)
 t_carga = st.sidebar.number_input("Carga (Conferente)", value=28, min_value=1)
-
 fator_kg_vol = st.sidebar.number_input("1 vol = ? kg", value=16.10, min_value=0.1, step=0.1, format="%.2f")
 
 # Produtividade por pessoa (ton/h)
 prod_descarga = (3600 / t_descarga) * fator_kg_vol / 1000  # ton/h por auxiliar
-prod_carga = (3600 / t_carga) * fator_kg_vol / 1000        # ton/h por conferente
+prod_carga = (3600 / t_carga) * fator_kg_vol / 1000       # ton/h por conferente
 
 st.sidebar.markdown("### Produtividade por Pessoa")
 st.sidebar.metric("Auxiliar (descarga)", f"{prod_descarga*1000:,.0f} kg/h")
 st.sidebar.metric("Conferente (carga)", f"{prod_carga*1000:,.0f} kg/h")
 
 escala_pessoas = st.sidebar.slider("Escala visual pessoas (ton/pessoa)", 1.0, 10.0, 3.0, 0.5)
-rotulos = st.checkbox("Exibir rótulos", True)
+rotulos = st.sidebar.checkbox("Exibir rótulos", True)
 
 # =============================================
-# SESSION STATE
+# SESSION STATE (UPLOADS)
 # =============================================
 keys = ["chegadas_bytes", "saidas_bytes", "conf_bytes", "aux_bytes",
         "chegadas_name", "saidas_name", "conf_name", "aux_name"]
@@ -61,7 +58,7 @@ for k in keys:
         st.session_state[k] = None
 
 # =============================================
-# DADOS PADRÃO
+# DADOS PADRÃO (SE NÃO TIVER UPLOAD)
 # =============================================
 padrao_chegadas = """00:00 1,7
 00:00 6,3
@@ -308,12 +305,26 @@ def extrair_jornadas(texto):
     return j
 
 # =============================================
+# UPLOAD DE ARQUIVOS (SE HOUVER)
+# =============================================
+chegadas_bytes = st.file_uploader("Chegadas (TXT ou XLSX)", type=["txt", "xlsx"], key="chegadas")
+saidas_bytes = st.file_uploader("Saídas (TXT ou XLSX)", type=["txt", "xlsx"], key="saidas")
+conf_bytes = st.file_uploader("Jornada Conferentes (TXT ou XLSX)", type=["txt", "xlsx"], key="conf")
+aux_bytes = st.file_uploader("Jornada Auxiliares (TXT ou XLSX)", type=["txt", "xlsx"], key="aux")
+
+# Salva no session_state
+if chegadas_bytes: st.session_state.chegadas_bytes = chegadas_bytes.getvalue()
+if saidas_bytes: st.session_state.saidas_bytes = saidas_bytes.getvalue()
+if conf_bytes: st.session_state.conf_bytes = conf_bytes.getvalue()
+if aux_bytes: st.session_state.aux_bytes = aux_bytes.getvalue()
+
+# =============================================
 # CARREGAR DADOS
 # =============================================
 chegadas_txt = ler_bytes(st.session_state.chegadas_bytes, padrao_chegadas)
-saidas_txt   = ler_bytes(st.session_state.saidas_bytes,   padrao_saidas)
-conf_txt     = ler_bytes(st.session_state.conf_bytes,     padrao_conf)
-aux_txt      = ler_bytes(st.session_state.aux_bytes,      padrao_aux)
+saidas_txt = ler_bytes(st.session_state.saidas_bytes, padrao_saidas)
+conf_txt = ler_bytes(st.session_state.conf_bytes, padrao_conf)
+aux_txt = ler_bytes(st.session_state.aux_bytes, padrao_aux)
 
 cheg = extrair_movimentos(chegadas_txt)
 said = extrair_movimentos(saidas_txt)
@@ -333,7 +344,7 @@ for txt in [conf_txt, aux_txt]:
                 horas_set.add(h)
                 max_min = max(max_min, m)
 
-# Timeline completa
+# Timeline completa (a cada 15 min)
 timeline_min = []
 current = 0
 while current <= max_min + 60:
@@ -357,11 +368,9 @@ def aplicar_jornada_com_cruzamento(j, tl_vals, contador):
     sf = min_hora(j.get("sf", j.get("si", "")))
     si = min_hora(j.get("si", "")) if "si" in j else -1
     ri = min_hora(j.get("ri", "")) if "ri" in j else -1
-
     if sf < e: sf += 1440
     if si != -1 and si < e: si += 1440
     if ri != -1 and ri < e: ri += 1440
-
     for i, t in enumerate(tl_vals):
         t_adj = t + (1440 if t < e else 0)
         active = False
@@ -391,7 +400,6 @@ df = pd.DataFrame({
     "Auxiliares": aux_count,
 })
 
-# PRODUTIVIDADE (ton/h)
 df["Prod_Conferentes_ton_h"] = (df["Conferentes"] * prod_carga).round(1)
 df["Prod_Auxiliares_ton_h"] = (df["Auxiliares"] * prod_descarga).round(1)
 df["Processamento_Total_ton_h"] = (df["Prod_Conferentes_ton_h"] + df["Prod_Auxiliares_ton_h"]).round(1)
@@ -405,21 +413,16 @@ for _, row in df.iterrows():
 df["Acumulado_ton"] = acumulado_list
 
 # =============================================
-# GRÁFICO (LINHA AMARELA DE VOLTA)
+# GRÁFICO
 # =============================================
 fig = go.Figure()
-
 fig.add_trace(go.Bar(x=df["Horario"], y=df["Chegada_ton"], name="Chegada", marker_color="#2ca02c"))
 fig.add_trace(go.Bar(x=df["Horario"], y=-df["Saida_ton"], name="Saída", marker_color="#d62728"))
 fig.add_trace(go.Scatter(x=df["Horario"], y=df["Acumulado_ton"], mode="lines", name="Acumulado",
                          fill="tozeroy", fillcolor="rgba(148,103,189,0.4)", line=dict(color="#9467bd", width=3)))
-
-# LINHA AMARELA (PROCESSAMENTO TOTAL)
 fig.add_trace(go.Scatter(x=df["Horario"], y=df["Processamento_Total_ton_h"], mode="lines", name="Processamento Total",
                          line=dict(color="#ff7f0e", width=3, dash="dash"),
                          hovertemplate="<b>%{x}</b><br>Processamento: %{y} ton/h<extra></extra>"))
-
-# PESSOAS (escaladas)
 fig.add_trace(go.Scatter(x=df["Horario"], y=df["Conferentes"] * escala_pessoas, mode="lines+markers",
                          name="Conferentes", line=dict(color="#1f77b4", width=2), marker=dict(size=5),
                          customdata=df[["Conferentes"]].values,
@@ -429,7 +432,6 @@ fig.add_trace(go.Scatter(x=df["Horario"], y=df["Auxiliares"] * escala_pessoas, m
                          customdata=df[["Auxiliares"]].values,
                          hovertemplate="<b>%{x}</b><br>Auxiliares: %{customdata[0]}<extra></extra>"))
 
-# Rótulos
 if rotulos:
     for _, r in df.iterrows():
         if r["Chegada_ton"] > 0.1:
