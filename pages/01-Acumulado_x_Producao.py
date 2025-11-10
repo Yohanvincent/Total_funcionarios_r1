@@ -3,26 +3,42 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import io
-from authenticate import get_authenticator  # ← IMPORTA O AUTHENTICATOR
+import streamlit_authenticator as stauth
 
 # =============================================
-# AUTENTICAÇÃO (LOGIN INVISÍVEL + PROTEÇÃO)
+# AUTENTICAÇÃO DIRETA (SIMPLIFICADA)
 # =============================================
-authenticator = get_authenticator()
+try:
+    names = st.secrets["auth"]["names"]
+    usernames = st.secrets["auth"]["usernames"]
+    passwords = st.secrets["auth"]["passwords"]
+except:
+    names = ["Admin Logística"]
+    usernames = ["admin"]
+    passwords = ["logistica123"]
 
-# LOGIN INVISÍVEL (mantém o cookie ativo)
+credentials = {"usernames": {}}
+for u, n, p in zip(usernames, names, passwords):
+    credentials["usernames"][u.lower()] = {"name": n, "password": p}
+
+authenticator = stauth.Authenticate(
+    credentials,
+    "logistica_dashboard",
+    "chave_forte_123",
+    cookie_expiry_days=7
+)
+
+# LOGIN INVISÍVEL
 authenticator.login('Login', 'main', prefilled=True)
 
-# VERIFICA SE ESTÁ LOGADO
-if not st.session_state.get("authentication_status"):
+# VERIFICA LOGIN
+if st.session_state.get("authentication_status"):
+    with st.sidebar:
+        st.success(f"Olá, **{st.session_state.name}**!")
+        authenticator.logout("Sair", "sidebar")
+else:
     st.error("Faça login na página inicial.")
     st.stop()
-
-# LOGOUT NA SIDEBAR
-with st.sidebar:
-    st.success(f"Olá, **{st.session_state.name}**!")
-    authenticator.logout("Sair", "sidebar")
-
 # =============================================
 # CONFIGURAÇÃO DA PÁGINA
 # =============================================
