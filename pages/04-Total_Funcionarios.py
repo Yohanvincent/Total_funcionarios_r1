@@ -25,11 +25,7 @@ try:
     for u, n, p in zip(usernames, names, passwords):
         credentials["usernames"][u.lower()] = {"name": n, "password": p}
 except:
-    credentials = {
-        "usernames": {
-            "admin": {"name": "Admin Logística", "password": "$2b$12$5uQ2z7W3k8Y9p0r1t2v3w4x6y7z8A9B0C1D2E3F4G5H6I7J8K9L0M"}
-        }
-    }
+    credentials = {"usernames": {"admin": {"name": "Admin Logística", "password": "$2b$12$5uQ2z7W3k8Y9p0r1t2v3w4x6y7z8A9B0C1D2E3F4G5H6I7J8K9L0M"}}}
 
 authenticator = stauth.Authenticate(credentials, "logistica_dashboard", "chave_forte_123", 7)
 name, authentication_status, username = authenticator.login("Login", "sidebar")
@@ -40,6 +36,8 @@ if not authentication_status:
 with st.sidebar:
     st.success(f"Olá, {name}")
     authenticator.logout("Sair", "sidebar")
+
+# === FINAL DA AUTENTICAÇÃO DIRETA (MESMO CÓDIGO DA TELA INICIAL) ===
 
 # =============================================
 # 1. CONFIGURAÇÃO DA PÁGINA
