@@ -1,6 +1,7 @@
 # Tela_Inicial.py
 import streamlit as st
 import streamlit_authenticator as stauth
+import bcrypt
 
 # =============================================
 # CONFIGURAÇÃO
@@ -48,7 +49,7 @@ if "logged_in" not in st.session_state:
     st.session_state.user_name = None
 
 # =============================================
-# FORMULÁRIO DE LOGIN
+# FORMULÁRIO DE LOGIN (MANUAL)
 # =============================================
 if not st.session_state.logged_in:
     with st.form("login_form"):
@@ -58,16 +59,19 @@ if not st.session_state.logged_in:
         submit = st.form_submit_button("Entrar")
 
         if submit:
-            name, authentication_status, _ = authenticator.login(username, password)
-            if authentication_status:
-                st.session_state.logged_in = True
-                st.session_state.user_name = name
-                st.success("Login realizado com sucesso!")
-                st.experimental_rerun()
-            elif authentication_status == False:
-                st.error("Usuário ou senha incorretos")
+            # VALIDAÇÃO MANUAL (POIS login() NÃO ACEITA PARÂMETROS)
+            user_key = username.lower()
+            if user_key in credentials["usernames"]:
+                stored_hash = credentials["usernames"][user_key]["password"]
+                if bcrypt.checkpw(password.encode(), stored_hash.encode()):
+                    st.session_state.logged_in = True
+                    st.session_state.user_name = credentials["usernames"][user_key]["name"]
+                    st.success("Login realizado com sucesso!")
+                    st.rerun()
+                else:
+                    st.error("Senha incorreta")
             else:
-                st.warning("Preencha os campos")
+                st.error("Usuário não encontrado")
 
 # =============================================
 # CONTEÚDO LOGADO
@@ -79,7 +83,7 @@ else:
         if st.button("Sair"):
             st.session_state.logged_in = False
             st.session_state.user_name = None
-            st.experimental_rerun()
+            st.rerun()
 
     # Título
     st.markdown(
