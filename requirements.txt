@@ -3,4 +3,3 @@ plotly
 pandas
 openpyxl
 PyYAML
-streamlit-authenticator==0.2.3
