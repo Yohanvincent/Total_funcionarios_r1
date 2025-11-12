@@ -17,7 +17,7 @@ def hora_to_datetime(hora_str: str, data_base: str = "2025-11-12") -> datetime:
     return datetime.combine(datetime.strptime(data_base, "%Y-%m-%d").date(), h)
 
 # -------------------------------------------------
-# DADOS FIXOS (EXATAMENTE COMO VOCÊ FORNECEU – NÃO EDITÁVEIS)
+# DADOS FIXOS (100% ORIGINAIS – NÃO EDITÁVEIS)
 # -------------------------------------------------
 chegada_fixa = """00:00 1,7
 00:00 6,3
@@ -238,7 +238,10 @@ def parse_producao(texto: str) -> pd.DataFrame:
         hora = partes[0]
         valor = float(partes[1].replace(",", "."))
         rows.append({"hora": hora_to_datetime(hora), "valor": valor})
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    # Agrupar por hora e somar (evita duplicatas)
+    df = df.groupby("hora")["valor"].sum().reset_index()
+    return df
 
 def parse_equipe(texto: str) -> pd.DataFrame:
     linhas = [l.strip() for l in texto.splitlines() if l.strip()]
@@ -248,19 +251,20 @@ def parse_equipe(texto: str) -> pd.DataFrame:
         if len(partes) == 3:
             inicio, fim, qtd_str = partes
             qtd = int(qtd_str)
-            intervalo_inicio = intervalo_fim = None
         else:
-            inicio, fim, intervalo_inicio, intervalo_fim, qtd_str = partes[:5]
+            inicio, fim, _, _, qtd_str = partes[:5]
             qtd = int(qtd_str)
 
         start = hora_to_datetime(inicio)
         end = hora_to_datetime(fim)
-
         cur = start
         while cur <= end:
             rows.append({"hora": cur, "disponivel": qtd})
             cur += timedelta(hours=1)
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    # Somar equipe por hora (evita duplicatas)
+    df = df.groupby("hora")["disponivel"].sum().reset_index()
+    return df
 
 # -------------------------------------------------
 # CÁLCULO FINAL
@@ -275,13 +279,13 @@ def calcular_dados():
     df_saida["movimento"]   = -df_saida["valor"]
 
     df_mov = pd.concat([df_chegada, df_saida], ignore_index=True)
+    df_mov = df_mov.groupby("hora")["movimento"].sum().reset_index()
     df_mov = df_mov.sort_values("hora")
     df_mov["acumulado"] = df_mov["movimento"].cumsum()
 
     # ---- equipe (conferentes + auxiliares) ----
     df_confer = parse_equipe(confer_fixa)
     df_aux    = parse_equipe(aux_fixa)
-
     df_equipe = pd.concat([df_confer, df_aux], ignore_index=True)
     df_equipe = df_equipe.groupby("hora")["disponivel"].sum().reset_index()
 
@@ -319,7 +323,7 @@ fig.add_trace(
         x=equipe_h["hora"],
         y=equipe_h["disponivel"],
         mode="lines+markers",
-        name="Equipe Disponível (Conferentes + Auxiliares)",
+        name="Equipe Disponível",
         line=dict(color="#1f77b4", width=2),
         marker=dict(size=6),
     )
@@ -330,23 +334,23 @@ fig.add_trace(
         x=acum_h["hora"],
         y=acum_h["acumulado"],
         mode="lines+markers",
-        name="Acumulação Líquida de Carga (t)",
+        name="Acumulação Líquida (t)",
         line=dict(color="#2ca02c", width=2),
         marker=dict(size=6),
     )
 )
 
-# Eixo X: 1h em 1h + grade fina para horas quebradas
+# Eixo X: 1h em 1h + grade fina
 fig.update_xaxes(
     title="Hora do Dia",
     type="date",
     tickformat="%H:%M",
     tickmode="linear",
-    dtick=3600 * 1000,  # 1 hora
+    dtick=3600 * 1000,
     range=[start_day, end_day],
     minor=dict(
         tickmode="linear",
-        dtick=300 * 1000,  # 5 min
+        dtick=300 * 1000,
         showgrid=True,
         gridcolor="lightgray",
     ),
@@ -376,7 +380,7 @@ with st.expander("Renomear eixos (opcional)"):
         st.plotly_chart(fig, use_container_width=True)
 
 st.caption(
-    "• **Dados 100 % originais** (chegadas, saídas, conferentes, auxiliares)\n"
-    "• **Eixo X**: ticks **1 h** + grade fina (5 min) → horas quebradas visíveis\n"
-    "• **Dia completo**: 00:00 a 23:00 sem distorção"
+    "• **Dados 100% originais** – duplicatas somadas\n"
+    "• **Eixo X**: 1h em 1h + grade fina (5 min)\n"
+    "• **Dia completo**: 00:00 a 23:00"
 )
