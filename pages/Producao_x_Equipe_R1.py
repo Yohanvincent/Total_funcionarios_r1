@@ -230,7 +230,7 @@ aux_fixa = """16:00 20:00 21:05 01:24 5
 # -------------------------------------------------
 # PARSE DOS DADOS
 # -------------------------------------------------
-def parse_producao(texto: str):
+def parse_producao(texto: str) -> pd.DataFrame:
     linhas = [l.strip() for l in texto.splitlines() if l.strip()]
     rows = []
     for linha in linhas:
@@ -240,25 +240,22 @@ def parse_producao(texto: str):
         rows.append({"hora": hora_to_datetime(hora), "valor": valor})
     return pd.DataFrame(rows)
 
-def parse_equipe(texto: str):
-    """Formato: início fim intervalo_início intervalo_fim qtd
-       Algumas linhas têm apenas 3 campos (ex: 19:00 22:52 12) → usamos qtd=valor"""
+def parse_equipe(texto: str) -> pd.DataFrame:
     linhas = [l.strip() for l in texto.splitlines() if l.strip()]
     rows = []
     for linha in linhas:
         partes = linha.split()
-        if len(partes) == 3:                     # caso especial (ex: 19:00 22:52 12)
+        if len(partes) == 3:
             inicio, fim, qtd_str = partes
             qtd = int(qtd_str)
             intervalo_inicio = intervalo_fim = None
-        else:                                    # formato completo
-)            inicio, fim, intervalo_inicio, intervalo_fim, qtd_str = partes[:5]
+        else:
+            inicio, fim, intervalo_inicio, intervalo_fim, qtd_str = partes[:5]
             qtd = int(qtd_str)
 
         start = hora_to_datetime(inicio)
-        end   = hora_to_datetime(fim)
+        end = hora_to_datetime(fim)
 
-        # gera ponto a cada hora dentro do turno
         cur = start
         while cur <= end:
             rows.append({"hora": cur, "disponivel": qtd})
@@ -310,6 +307,7 @@ acumulado, equipe = calcular_dados()
 start_day = datetime(2025, 11, 12, 0, 0)
 end_day   = datetime(2025, 11, 12, 23, 0)
 
+# Preparar dados hourly
 acum_h = preparar_hourly(acumulado, "acumulado", start_day, end_day)
 equipe_h = preparar_hourly(equipe, "disponivel", start_day, end_day)
 
@@ -338,17 +336,17 @@ fig.add_trace(
     )
 )
 
-# eixo X: 1h em 1h + grade fina (5 min) para visualizar horas quebradas
+# Eixo X: 1h em 1h + grade fina para horas quebradas
 fig.update_xaxes(
     title="Hora do Dia",
     type="date",
     tickformat="%H:%M",
     tickmode="linear",
-    dtick=3600 * 1000,          # 1 hora
+    dtick=3600 * 1000,  # 1 hora
     range=[start_day, end_day],
     minor=dict(
         tickmode="linear",
-        dtick=300 * 1000,       # 5 min
+        dtick=300 * 1000,  # 5 min
         showgrid=True,
         gridcolor="lightgray",
     ),
@@ -378,7 +376,7 @@ with st.expander("Renomear eixos (opcional)"):
         st.plotly_chart(fig, use_container_width=True)
 
 st.caption(
-    "• **Dados 100 % originais** (chegadas, saídas, conferentes, auxiliares)  \n"
-    "• **Eixo X**: ticks **1 h** + grade fina (5 min) → horas quebradas visíveis  \n"
+    "• **Dados 100 % originais** (chegadas, saídas, conferentes, auxiliares)\n"
+    "• **Eixo X**: ticks **1 h** + grade fina (5 min) → horas quebradas visíveis\n"
     "• **Dia completo**: 00:00 a 23:00 sem distorção"
 )
