@@ -1,4 +1,4 @@
-# app_logistica_r1.py
+# Producao_x_Equipe_R1.py
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
@@ -19,7 +19,6 @@ def hora_to_datetime(hora_str: str, data_base: str = "2025-11-12") -> datetime:
 # -------------------------------------------------
 # DADOS FIXOS (EXATAMENTE COMO VOCÊ FORNECEU – NÃO EDITÁVEIS)
 # -------------------------------------------------
-# --- PRODUÇÃO: CHEGADA ---
 chegada_fixa = """00:00 1,7
 00:00 6,3
 00:20 14,9
@@ -114,7 +113,6 @@ chegada_fixa = """00:00 1,7
 23:15 1,4
 23:20 8,2"""
 
-# --- PRODUÇÃO: SAÍDA ---
 saida_fixa = """00:00 0,1
 00:30 1,4
 00:30 1,3
@@ -209,7 +207,6 @@ saida_fixa = """00:00 0,1
 23:30 0,3
 23:30 0,6"""
 
-# --- CONFERENTES ---
 confer_fixa = """01:00 04:00 05:05 10:23 1
 16:00 20:00 21:05 01:24 2
 18:30 22:30 23:30 03:38 4
@@ -219,7 +216,6 @@ confer_fixa = """01:00 04:00 05:05 10:23 1
 23:30 03:30 04:35 08:49 19
 23:50 02:40 03:45 09:11 4"""
 
-# --- AUXILIARES ---
 aux_fixa = """16:00 20:00 21:05 01:24 5
 18:00 22:00 23:00 03:12 1
 19:00 22:52 12
@@ -232,7 +228,7 @@ aux_fixa = """16:00 20:00 21:05 01:24 5
 23:50 02:40 03:45 09:11 1"""
 
 # -------------------------------------------------
-# PARSE DOS DADOS FIXOS
+# PARSE DOS DADOS
 # -------------------------------------------------
 def parse_producao(texto: str):
     linhas = [l.strip() for l in texto.splitlines() if l.strip()]
@@ -240,27 +236,33 @@ def parse_producao(texto: str):
     for linha in linhas:
         partes = linha.split()
         hora = partes[0]
-        valor = float(partes[1].replace(',', '.'))
+        valor = float(partes[1].replace(",", "."))
         rows.append({"hora": hora_to_datetime(hora), "valor": valor})
     return pd.DataFrame(rows)
 
 def parse_equipe(texto: str):
+    """Formato: início fim intervalo_início intervalo_fim qtd
+       Algumas linhas têm apenas 3 campos (ex: 19:00 22:52 12) → usamos qtd=valor"""
     linhas = [l.strip() for l in texto.splitlines() if l.strip()]
     rows = []
     for linha in linhas:
         partes = linha.split()
-        inicio = partes[0]
-        fim = partes[1]
-        intervalo_inicio = partes[2]
-        intervalo_fim = partes[3]
-        qtd = int(partes[4])
+        if len(partes) == 3:                     # caso especial (ex: 19:00 22:52 12)
+            inicio, fim, qtd_str = partes
+            qtd = int(qtd_str)
+            intervalo_inicio = intervalo_fim = None
+        else:                                    # formato completo
+)            inicio, fim, intervalo_inicio, intervalo_fim, qtd_str = partes[:5]
+            qtd = int(qtd_str)
+
         start = hora_to_datetime(inicio)
-        end = hora_to_datetime(fim)
-        # Gerar pontos por hora dentro do turno
-        current = start
-        while current <= end:
-            rows.append({"hora": current, "disponivel": qtd})
-            current += timedelta(hours=1)
+        end   = hora_to_datetime(fim)
+
+        # gera ponto a cada hora dentro do turno
+        cur = start
+        while cur <= end:
+            rows.append({"hora": cur, "disponivel": qtd})
+            cur += timedelta(hours=1)
     return pd.DataFrame(rows)
 
 # -------------------------------------------------
@@ -268,20 +270,21 @@ def parse_equipe(texto: str):
 # -------------------------------------------------
 @st.cache_data
 def calcular_dados():
-    # Produção: chegada - saída → acumulação
+    # ---- produção (chegada - saída) ----
     df_chegada = parse_producao(chegada_fixa)
-    df_saida = parse_producao(saida_fixa)
-    df_chegada["tipo"] = "chegada"
-    df_saida["tipo"] = "saida"
+    df_saida   = parse_producao(saida_fixa)
+
     df_chegada["movimento"] = df_chegada["valor"]
-    df_saida["movimento"] = -df_saida["valor"]
+    df_saida["movimento"]   = -df_saida["valor"]
+
     df_mov = pd.concat([df_chegada, df_saida], ignore_index=True)
     df_mov = df_mov.sort_values("hora")
     df_mov["acumulado"] = df_mov["movimento"].cumsum()
 
-    # Equipe: conferentes + auxiliares
+    # ---- equipe (conferentes + auxiliares) ----
     df_confer = parse_equipe(confer_fixa)
-    df_aux = parse_equipe(aux_fixa)
+    df_aux    = parse_equipe(aux_fixa)
+
     df_equipe = pd.concat([df_confer, df_aux], ignore_index=True)
     df_equipe = df_equipe.groupby("hora")["disponivel"].sum().reset_index()
 
@@ -310,7 +313,7 @@ end_day   = datetime(2025, 11, 12, 23, 0)
 acum_h = preparar_hourly(acumulado, "acumulado", start_day, end_day)
 equipe_h = preparar_hourly(equipe, "disponivel", start_day, end_day)
 
-# Gráfico único
+# ---------- GRÁFICO ----------
 fig = go.Figure()
 
 fig.add_trace(
@@ -335,17 +338,17 @@ fig.add_trace(
     )
 )
 
-# Eixo X: 1h em 1h + horas quebradas nos dados
+# eixo X: 1h em 1h + grade fina (5 min) para visualizar horas quebradas
 fig.update_xaxes(
     title="Hora do Dia",
     type="date",
     tickformat="%H:%M",
     tickmode="linear",
-    dtick=3600 * 1000,  # 1 hora
+    dtick=3600 * 1000,          # 1 hora
     range=[start_day, end_day],
     minor=dict(
         tickmode="linear",
-        dtick=300 * 1000,  # 5 minutos (para visual de horas quebradas)
+        dtick=300 * 1000,       # 5 min
         showgrid=True,
         gridcolor="lightgray",
     ),
@@ -362,7 +365,7 @@ fig.update_layout(
 
 st.plotly_chart(fig, use_container_width=True)
 
-# Customização de títulos
+# ---------- RENOMEAR EIXOS ----------
 with st.expander("Renomear eixos (opcional)"):
     col1, col2 = st.columns(2)
     with col1:
@@ -375,7 +378,7 @@ with st.expander("Renomear eixos (opcional)"):
         st.plotly_chart(fig, use_container_width=True)
 
 st.caption(
-    "• **Dados 100% originais** (chegadas, saídas, conferentes, auxiliares)  \n"
-    "• **Eixo X**: ticks a cada **1 hora** + grade fina (5 min) para ver horas quebradas  \n"
+    "• **Dados 100 % originais** (chegadas, saídas, conferentes, auxiliares)  \n"
+    "• **Eixo X**: ticks **1 h** + grade fina (5 min) → horas quebradas visíveis  \n"
     "• **Dia completo**: 00:00 a 23:00 sem distorção"
 )
