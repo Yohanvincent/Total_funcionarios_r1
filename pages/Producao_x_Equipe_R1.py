@@ -11,7 +11,7 @@ st.title("Produção vs Equipe Disponível – R1")
 rotulos = st.checkbox("Rótulos", value=True)
 
 # =============================================
-# DADOS FIXOS (seus dados completos)
+# DADOS FIXOS (seus dados completos – já colados)
 # =============================================
 chegada_fixa = """00:00 1,7
 00:00 6,3
@@ -222,7 +222,7 @@ aux_fixa = """16:00 20:00 21:05 01:24 5
 23:50 02:40 03:45 09:11 1"""
 
 # =============================================
-# PROCESSAMENTO (igual ao anterior que já funcionava)
+# PROCESSAMENTO (igual ao anterior)
 # =============================================
 def extrair_producao():
     cheg = {}
@@ -256,7 +256,7 @@ horarios_str = sorted(todos, key=lambda x: int(x[:2])*60 + int(x[3:]))
 base = datetime(2024, 1, 1)
 horarios_dt = [base.replace(hour=int(h.split(":")[0]), minute=int(h.split(":")[1])) for h in horarios_str]
 
-# Cálculo da equipe (igual ao anterior)
+# Cálculo da equipe (igual)
 def str_to_min(h): return int(h[:2])*60 + int(h[3:])
 def processar_jornadas(txt):
     j = []
@@ -305,54 +305,76 @@ scale = max_ton / (df["Equipe"].max() + 5) * 0.9
 df["Equipe_Escalada"] = df["Equipe"] * scale
 
 # =============================================
-# GRÁFICO FINAL – PERFEITO
+# GRÁFICO FINAL – BARRAS MUITO GROSSAS!
 # =============================================
 fig = go.Figure()
 
-# Barras mais grossas e mais juntas
-fig.add_trace(go.Bar(x=df["Horario"], y=df["Chegada_Ton"], name="Chegada (ton)",
-                     marker_color="#90EE90", opacity=0.8, width=0.0008))  # ← barras mais grossas
-fig.add_trace(go.Bar(x=df["Horario"], y=df["Saida_Ton"], name="Saída (ton)",
-                     marker_color="#E74C3C", opacity=0.8, width=0.0008))
+# BARRAS SUPER GROSSAS – AGORA SIM!
+fig.add_trace(go.Bar(
+    x=df["Horario"], 
+    y=df["Chegada_Ton"], 
+    name="Chegada (ton)",
+    marker_color="#90EE90", 
+    opacity=0.9,
+    width=1800000  # ← Valor alto = barras bem grossas (em milissegundos)
+))
 
-fig.add_trace(go.Scatter(x=df["Horario"], y=df["Equipe_Escalada"], mode="lines+markers", name="Equipe",
-                         line=dict(color="#9B59B6", width=4, dash="dot"), marker=dict(size=8),
-                         customdata=df["Equipe"], hovertemplate="Equipe: %{customdata}"))
+fig.add_trace(go.Bar(
+    x=df["Horario"], 
+    y=df["Saida_Ton"], 
+    name="Saída (ton)",
+    marker_color="#E74C3C", 
+    opacity=0.9,
+    width=1800000  # ← Mesmo valor para saída
+))
 
+fig.add_trace(go.Scatter(
+    x=df["Horario"], y=df["Equipe_Escalada"], 
+    mode="lines+markers", name="Equipe",
+    line=dict(color="#9B59B6", width=5, dash="dot"), 
+    marker=dict(size=9),
+    customdata=df["Equipe"], 
+    hovertemplate="Equipe: %{customdata}<extra></extra>"
+))
+
+# Rótulos
 if rotulos:
     for _, r in df.iterrows():
         if r["Chegada_Ton"] > 0:
-            fig.add_annotation(x=r["Horario"], y=r["Chegada_Ton"], text=f"{r['Chegada_Ton']}", font=dict(size=9), showarrow=False, yshift=10)
+            fig.add_annotation(x=r["Horario"], y=r["Chegada_Ton"], text=f"{r['Chegada_Ton']}", 
+                               font=dict(size=9), showarrow=False, yshift=12)
         if r["Saida_Ton"] > 0:
-            fig.add_annotation(x=r["Horario"], y=r["Saida_Ton"], text=f"{r['Saida_Ton']}", font=dict(size=9, color="red"), showarrow=False, yshift=10)
+            fig.add_annotation(x=r["Horario"], y=r["Saida_Ton"], text=f"{r['Saida_Ton']}", 
+                               font=dict(size=9, color="red"), showarrow=False, yshift=12)
         if r["Equipe"] > 0:
-            fig.add_annotation(x=r["Horario"], y=r["Equipe_Escalada"], text=f"{int(r['Equipe'])}", font=dict(size=10, color="#9B59B6"), showarrow=False, yshift=8)
+            fig.add_annotation(x=r["Horario"], y=r["Equipe_Escalada"], text=f"{int(r['Equipe'])}", 
+                               font=dict(size=10, color="#9B59B6"), showarrow=False, yshift=10)
 
-# EIXO X: todos os horários na vertical, mesma fonte e tamanho
+# EIXO X – vertical, mesma fonte
 fig.update_xaxes(
     type="date",
     tickformat="%H:%M",
     tickmode="array",
-    tickvals=df["Horario"].tolist(),
-    ticktext=df["Horario_Str"].tolist(),
-    tickangle=90,                    # ← vertical
-    tickfont=dict(size=11, family="Arial"),  # ← mesma fonte e tamanho
+    tickvals=df["Horario"],
+    ticktext=df["Horario_Str"],
+    tickangle=90,
+    tickfont=dict(size=11, family="Arial"),
     showgrid=True,
     gridcolor="lightgray"
 )
 
 fig.update_layout(
-    height=680,
+    height=700,
     barmode="stack",
     hovermode="x unified",
     legend=dict(x=0, y=1.1, orientation="h"),
-    margin=dict(l=60, r=60, t=50, b=100),  # mais espaço embaixo para os rótulos verticais
+    margin=dict(l=60, r=60, t=50, b=110),
     xaxis=dict(ticklabelposition="outside bottom")
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
-# Download
+# Download Excel
 out = io.BytesIO()
 df_out = df[["Horario_Str", "Chegada_Ton", "Saida_Ton", "Equipe"]].copy()
 df_out.columns = ["Horário", "Chegada_Ton", "Saída_Ton", "Equipe"]
