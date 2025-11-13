@@ -344,7 +344,7 @@ scale = y_max / eq_range if eq_range > 0 else 1
 df["Equipe_Escalada"] = df["Equipe"] * scale
 
 # =============================================
-# GRÁFICO (100 % IGUAL AO ORIGINAL)
+# GRÁFICO (AGORA COM TODOS OS HORÁRIOS VISÍVEIS NO EIXO X)
 # =============================================
 fig = go.Figure()
 
@@ -382,25 +382,44 @@ if rotulos:
                                font=dict(color="#9B59B6", size=9), bgcolor="white",
                                bordercolor="#9B59B6", borderwidth=1, showarrow=False, yshift=0, align="center")
 
-# ---------- EIXO X FIXO DE HORA EM HORA ----------
+# ---------- EIXO X: HORAS CHEIAS (PRINCIPAIS) + HORÁRIOS QUEBRADOS (SECUNDÁRIOS) ----------
+horas_inteiras = [f"{h:02d}:00" for h in range(24)]
+
 fig.update_xaxes(
     title="Horário",
     tickmode="array",
-    tickvals=horas_inteiras,          # 00:00, 01:00, ..., 23:00
+    tickvals=horas_inteiras,                    # Ticks principais: 00:00, 01:00, ...
     ticktext=horas_inteiras,
+    tickangle=0,
+    tickfont=dict(size=14, color="black"),
+    
+    # Ticks secundários: todos os horários com dados (quebrados)
     minor=dict(
-        tickmode="auto",
-        nticks=12,
+        tickmode="array",
+        tickvals=df["Horario"].tolist(),        # Todos os horários reais (04:05, 21:40, etc)
+        ticktext=[h if h.endswith(("00", "30")) else "" for h in df["Horario"]],  # Mostra só :00 e :30, ou todos se quiser
+        # Ou use: ticktext=df["Horario"].tolist()  → para mostrar TODOS os horários quebrados
+        ticktext=df["Horario"].tolist(),        # ← MUDE AQUI SE QUISER TODOS VISÍVEIS
+        tickfont=dict(size=10, color="gray"),
         showgrid=True,
-        gridcolor="lightgray"
-    )
+        gridcolor="lightgray",
+        griddash="dot"
+    ),
+    
+    # Grade principal nas horas cheias
+    showgrid=True,
+    gridwidth=2,
+    gridcolor="rgba(0,0,0,0.1)"
 )
 
 fig.update_layout(
     xaxis_title="Horário",
     yaxis=dict(title="Toneladas | Equipe (escalada)", side="left", range=[0, y_max], zeroline=False),
-    height=650, hovermode="x unified", legend=dict(x=0, y=1.1, orientation="h"),
-    barmode="stack", margin=dict(l=60, r=60, t=40, b=60)
+    height=650,
+    hovermode="x unified",
+    legend=dict(x=0, y=1.1, orientation="h"),
+    barmode="stack",
+    margin=dict(l=60, r=60, t=40, b=80)
 )
 
 st.plotly_chart(fig, use_container_width=True)
