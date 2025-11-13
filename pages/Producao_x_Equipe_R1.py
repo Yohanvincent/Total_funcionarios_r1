@@ -11,7 +11,7 @@ st.title("Produção vs Equipe Disponível")
 rotulos = st.checkbox("Rótulos", True)
 
 # =============================================
-# DADOS FIXOS (NÃO EDITÁVEIS) - MANTIDOS 100%
+# DADOS FIXOS (mantidos 100% seus)
 # =============================================
 chegada_fixa = """00:00 1,7
 00:00 6,3
@@ -222,7 +222,7 @@ aux_fixa = """16:00 20:00 21:05 01:24 5
 23:50 02:40 03:45 09:11 1"""
 
 # =============================================
-# PROCESSAMENTO DOS DADOS (com todos os horários)
+# PROCESSAMENTO (todos os horários visíveis)
 # =============================================
 def extrair_producao():
     cheg = {}
@@ -243,13 +243,11 @@ def extrair_producao():
 
 cheg, said = extrair_producao()
 
-# Forçar todas as horas cheias + horários reais
+# Todos os horários (horas cheias + reais + jornadas)
 horas_cheias = [f"{h:02d}:00" for h in range(24)]
 todos_horarios = set(horas_cheias)
 todos_horarios.update(cheg.keys())
 todos_horarios.update(said.keys())
-
-# Adicionar horários das jornadas
 for texto in [confer_fixa, aux_fixa]:
     for palavra in texto.split():
         if ":" in palavra and len(palavra) == 5:
@@ -259,7 +257,7 @@ horarios_str = sorted(todos_horarios, key=lambda x: int(x[:2])*60 + int(x[3:]))
 base = datetime(2024, 1, 1)
 horarios_dt = [base.replace(hour=int(h.split(":")[0]), minute=int(h.split(":")[1])) for h in horarios_str]
 
-# Cálculo da equipe (mantido seu estilo)
+# Cálculo da equipe
 def min_hora(h): return int(h[:2])*60 + int(h[3:])
 def jornadas(t):
     j = []
@@ -295,38 +293,31 @@ eq_conf = calcular_equipe(j_conf)
 eq_aux = calcular_equipe(j_aux)
 eq_total = [c + a for c, a in zip(eq_conf, eq_aux)]
 
-# DataFrame final
-cheg_val = [round(cheg.get(h, 0), 1) for h in horarios_str]
-said_val = [round(said.get(h, 0), 1) for h in horarios_str]
-
 df = pd.DataFrame({
     "Horario": horarios_dt,
     "Horario_Str": horarios_str,
-    "Chegada_Ton": cheg_val,
-    "Saida_Ton": said_val,
+    "Chegada_Ton": [round(cheg.get(h, 0), 1) for h in horarios_str],
+    "Saida_Ton": [round(said.get(h, 0), 1) for h in horarios_str],
     "Equipe": eq_total
 })
 
-# Escala da equipe
-max_ton = max(max(cheg_val), max(said_val), 1)
-scale = max_ton / (max(eq_total) + 5) * 0.9
+max_ton = max(df["Chegada_Ton"].max(), df["Saida_Ton"].max(), 1)
+scale = max_ton / (df["Equipe"].max() + 5) * 0.9
 df["Equipe_Escalada"] = df["Equipe"] * scale
 
 # =============================================
-# GRÁFICO 100% COM SEU ESTILO + HORÁRIOS COMPLETOS
+# GRÁFICO FINAL – BARRAS GROSSAS, SEM SOBREPOSIÇÃO!
 # =============================================
 fig = go.Figure()
 
 fig.add_trace(go.Bar(
     x=df["Horario"], y=df["Chegada_Ton"],
-    name="Chegada (ton)", marker_color="#90EE90", opacity=0.85,
-    width=1800000  # ← barras grossas!
+    name="Chegada (ton)", marker_color="#90EE90", opacity=0.85
 ))
 
 fig.add_trace(go.Bar(
     x=df["Horario"], y=df["Saida_Ton"],
-    name="Saída (ton)", marker_color="#E74C3C", opacity=0.85,
-    width=1800000
+    name="Saída (ton)", marker_color="#E74C3C", opacity=0.85
 ))
 
 fig.add_trace(go.Scatter(
@@ -338,7 +329,7 @@ fig.add_trace(go.Scatter(
     hovertemplate="Equipe: %{customdata}<extra></extra>"
 ))
 
-# Rótulos com borda (exatamente como você ama!)
+# Rótulos com borda (seu estilo lindo!)
 if rotulos:
     for _, r in df.iterrows():
         if r["Chegada_Ton"] > 0:
@@ -354,7 +345,7 @@ if rotulos:
                                font=dict(color="#9B59B6", size=10), bgcolor="white", bordercolor="#9B59B6", borderwidth=1,
                                showarrow=False, yshift=8)
 
-# EIXO X: vertical, todos os horários, mesmo estilo
+# EIXO X: todos os horários na vertical
 fig.update_xaxes(
     tickvals=df["Horario"],
     ticktext=df["Horario_Str"],
@@ -363,20 +354,23 @@ fig.update_xaxes(
     title="Horário"
 )
 
+# ESSA É A SOLUÇÃO: bargap e bargroupgap
 fig.update_layout(
-    xaxis_title="Horário",
-    yaxis=dict(title="Toneladas | Equipe (escalada)", side="left", range=[0, max_ton + 10]),
-    height=680,
     barmode="stack",
+    bargap=0.1,        # ← espaço entre grupos de barras
+    bargroupgap=0,     # ← sem espaço extra entre chegada/saída
+    xaxis_title="Horário",
+    yaxis=dict(title="Toneladas | Equipe (escalada)", range=[0, max_ton + 10]),
+    height=700,
     hovermode="x unified",
     legend=dict(x=0, y=1.1, orientation="h"),
-    margin=dict(l=60, r=60, t=40, b=110)
+    margin=dict(l=60, r=60, t=40, b=120)
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
 # =============================================
-# DOWNLOAD E DADOS FIXOS (igual ao seu)
+# DOWNLOAD E DADOS FIXOS
 # =============================================
 out = io.BytesIO()
 df_export = df[["Horario_Str", "Chegada_Ton", "Saida_Ton", "Equipe"]].copy()
@@ -389,12 +383,8 @@ st.download_button("Baixar Excel", out, "producao_vs_equipe.xlsx", "application/
 st.markdown("### Dados Fixos Utilizados")
 col1, col2 = st.columns(2)
 with col1:
-    st.markdown("**Conferentes**")
-    st.code(confer_fixa, language="text")
-    st.markdown("**Produção - Chegada**")
-    st.code(chegada_fixa, language="text")
+    st.markdown("**Conferentes**"); st.code(confer_fixa, language="text")
+    st.markdown("**Chegada**"); st.code(chegada_fixa, language="text")
 with col2:
-    st.markdown("**Auxiliares**")
-    st.code(aux_fixa, language="text")
-    st.markdown("**Produção - Saída**")
-    st.code(saida_fixa, language="text")
+    st.markdown("**Auxiliares**"); st.code(aux_fixa, language="text")
+    st.markdown("**Saída**"); st.code(saida_fixa, language="text")
