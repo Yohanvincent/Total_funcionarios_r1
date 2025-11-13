@@ -222,7 +222,7 @@ aux_fixa = """16:00 20:00 21:05 01:24 5
 23:50 02:40 03:45 09:11 1"""
 
 # =============================================
-# PROCESSAMENTO
+# PROCESSAMENTO (igual ao anterior que já funcionava)
 # =============================================
 def extrair_producao():
     cheg = {}
@@ -243,10 +243,7 @@ def extrair_producao():
 
 cheg, said = extrair_producao()
 
-# Horas cheias fixas
 horas_cheias = [f"{h:02d}:00" for h in range(24)]
-
-# Todos os horários com movimento ou jornada
 todos = set(horas_cheias)
 todos.update(cheg.keys())
 todos.update(said.keys())
@@ -259,7 +256,7 @@ horarios_str = sorted(todos, key=lambda x: int(x[:2])*60 + int(x[3:]))
 base = datetime(2024, 1, 1)
 horarios_dt = [base.replace(hour=int(h.split(":")[0]), minute=int(h.split(":")[1])) for h in horarios_str]
 
-# Cálculo da equipe (mantido exatamente como antes)
+# Cálculo da equipe (igual ao anterior)
 def str_to_min(h): return int(h[:2])*60 + int(h[3:])
 def processar_jornadas(txt):
     j = []
@@ -295,7 +292,6 @@ eq_conf = calcular_equipe(processar_jornadas(confer_fixa))
 eq_aux  = calcular_equipe(processar_jornadas(aux_fixa))
 eq_total = [a + b for a, b in zip(eq_conf, eq_aux)]
 
-# DataFrame
 df = pd.DataFrame({
     "Horario": horarios_dt,
     "Horario_Str": horarios_str,
@@ -309,12 +305,16 @@ scale = max_ton / (df["Equipe"].max() + 5) * 0.9
 df["Equipe_Escalada"] = df["Equipe"] * scale
 
 # =============================================
-# GRÁFICO – EIXO X PERFEITO (sem erro!)
+# GRÁFICO FINAL – PERFEITO
 # =============================================
 fig = go.Figure()
 
-fig.add_trace(go.Bar(x=df["Horario"], y=df["Chegada_Ton"], name="Chegada (ton)", marker_color="#90EE90", opacity=0.8))
-fig.add_trace(go.Bar(x=df["Horario"], y=df["Saida_Ton"], name="Saída (ton)", marker_color="#E74C3C", opacity=0.8))
+# Barras mais grossas e mais juntas
+fig.add_trace(go.Bar(x=df["Horario"], y=df["Chegada_Ton"], name="Chegada (ton)",
+                     marker_color="#90EE90", opacity=0.8, width=0.0008))  # ← barras mais grossas
+fig.add_trace(go.Bar(x=df["Horario"], y=df["Saida_Ton"], name="Saída (ton)",
+                     marker_color="#E74C3C", opacity=0.8, width=0.0008))
+
 fig.add_trace(go.Scatter(x=df["Horario"], y=df["Equipe_Escalada"], mode="lines+markers", name="Equipe",
                          line=dict(color="#9B59B6", width=4, dash="dot"), marker=dict(size=8),
                          customdata=df["Equipe"], hovertemplate="Equipe: %{customdata}"))
@@ -328,37 +328,31 @@ if rotulos:
         if r["Equipe"] > 0:
             fig.add_annotation(x=r["Horario"], y=r["Equipe_Escalada"], text=f"{int(r['Equipe'])}", font=dict(size=10, color="#9B59B6"), showarrow=False, yshift=8)
 
-# EIXO X – FORMA QUE FUNCIONA 100% NO PLOTLY ATUAL
+# EIXO X: todos os horários na vertical, mesma fonte e tamanho
 fig.update_xaxes(
     type="date",
     tickformat="%H:%M",
     tickmode="array",
-    tickvals=[base.replace(hour=h) for h in range(24)],
-    ticktext=[f"{h:02d}:00" for h in range(24)],
-    tickangle=0,
-    tickfont=dict(size=14),
-    # Horários quebrados como anotações (não dá erro)
+    tickvals=df["Horario"].tolist(),
+    ticktext=df["Horario_Str"].tolist(),
+    tickangle=90,                    # ← vertical
+    tickfont=dict(size=11, family="Arial"),  # ← mesma fonte e tamanho
     showgrid=True,
     gridcolor="lightgray"
 )
-
-# Adiciona labels menores para horários quebrados
-for h_str, h_dt in zip(horarios_str, horarios_dt):
-    if h_str not in horas_cheias:
-        fig.add_annotation(x=h_dt, y=0, text=h_str[-5:], xref="x", yref="paper", yanchor="top",
-                           showarrow=False, font=dict(size=9, color="gray"), yshift=-10)
 
 fig.update_layout(
     height=680,
     barmode="stack",
     hovermode="x unified",
     legend=dict(x=0, y=1.1, orientation="h"),
-    margin=dict(l=60, r=60, t=50, b=80)
+    margin=dict(l=60, r=60, t=50, b=100),  # mais espaço embaixo para os rótulos verticais
+    xaxis=dict(ticklabelposition="outside bottom")
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
-# Download Excel
+# Download
 out = io.BytesIO()
 df_out = df[["Horario_Str", "Chegada_Ton", "Saida_Ton", "Equipe"]].copy()
 df_out.columns = ["Horário", "Chegada_Ton", "Saída_Ton", "Equipe"]
