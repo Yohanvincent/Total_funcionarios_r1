@@ -11,7 +11,7 @@ st.title("Produção vs Equipe Disponível – R1")
 rotulos = st.checkbox("Rótulos", value=True)
 
 # =============================================
-# DADOS FIXOS (seus dados completos – cole tudo aqui)
+# DADOS FIXOS (seus dados completos)
 # =============================================
 chegada_fixa = """00:00 1,7
 00:00 6,3
@@ -222,69 +222,53 @@ aux_fixa = """16:00 20:00 21:05 01:24 5
 23:50 02:40 03:45 09:11 1"""
 
 # =============================================
-# PROCESSAMENTO SEGURO DOS DADOS
+# PROCESSAMENTO
 # =============================================
 def extrair_producao():
     cheg = {}
     said = {}
     for linha in chegada_fixa.strip().splitlines():
         if not linha.strip(): continue
-        partes = linha.split(maxsplit=1)
-        if len(partes) != 2: continue
-        h, v_str = partes
-        try:
-            v = float(v_str.replace(",", "."))
-            cheg[h] = cheg.get(h, 0) + v
-        except:
-            continue
+        p = linha.split(maxsplit=1)
+        if len(p) != 2: continue
+        h, v = p
+        cheg[h] = cheg.get(h, 0) + float(v.replace(",", "."))
     for linha in saida_fixa.strip().splitlines():
         if not linha.strip(): continue
-        partes = linha.split(maxsplit=1)
-        if len(partes) != 2: continue
-        h, v_str = partes
-        try:
-            v = float(v_str.replace(",", "."))
-            said[h] = said.get(h, 0) + v
-        except:
-            continue
+        p = linha.split(maxsplit=1)
+        if len(p) != 2: continue
+        h, v = p
+        said[h] = said.get(h, 0) + float(v.replace(",", "."))
     return cheg, said
 
 cheg, said = extrair_producao()
 
-# =============================================
-# MONTAR LISTA DE HORÁRIOS (horas cheias + todos os horários reais)
-# =============================================
+# Horas cheias fixas
 horas_cheias = [f"{h:02d}:00" for h in range(24)]
-todos_horarios = set(horas_cheias)
-todos_horarios.update(cheg.keys())
-todos_horarios.update(said.keys())
 
-# Adicionar horários das jornadas
-for texto in [confer_fixa, aux_fixa]:
-    for palavra in texto.split():
-        if ":" in palavra and len(palavra) == 5:
-            todos_horarios.add(palavra)
+# Todos os horários com movimento ou jornada
+todos = set(horas_cheias)
+todos.update(cheg.keys())
+todos.update(said.keys())
+for t in [confer_fixa, aux_fixa]:
+    for w in t.split():
+        if ":" in w and len(w) == 5:
+            todos.add(w)
 
-horarios_str = sorted(todos_horarios, key=lambda x: int(x[:2])*60 + int(x[3:]))
+horarios_str = sorted(todos, key=lambda x: int(x[:2])*60 + int(x[3:]))
+base = datetime(2024, 1, 1)
+horarios_dt = [base.replace(hour=int(h.split(":")[0]), minute=int(h.split(":")[1])) for h in horarios_str]
 
-# Converter para datetime
-base_date = datetime(2024, 1, 1)
-horarios_dt = [base_date.replace(hour=int(h.split(":")[0]), minute=int(h.split(":")[1])) for h in horarios_str]
-
-# =============================================
-# CÁLCULO DA EQUIPE (mantido exatamente como antes)
-# =============================================
-def str_to_min(h): 
-    return int(h[:2])*60 + int(h[3:])
-
-def processar_jornadas(texto):
+# Cálculo da equipe (mantido exatamente como antes)
+def str_to_min(h): return int(h[:2])*60 + int(h[3:])
+def processar_jornadas(txt):
     j = []
-    for linha in texto.strip().splitlines():
-        p = linha.split()
+    for l in txt.strip().splitlines():
+        p = l.split()
         if len(p) == 5 and p[4].isdigit():
-            j.append({"e": p[0], "si": p[1], "ri": p[2], "sf": p[3], "q": int(p[4])})
+            j.append({"e":p[0],"si":p[1],"ri":p[2],"sf":p[3],"q":int(p[4])})
         elif len(p) == 3 and p[2].isdigit():
-            j.append({"e": p[0], "sf": p[1], "q": int(p[2])})
+            j.append({"e":p[0],"sf":p[1],"q":int(p[2])})
     return j
 
 def calcular_equipe(jornadas):
@@ -296,26 +280,22 @@ def calcular_equipe(jornadas):
             ri = str_to_min(j["ri"])
             sf = str_to_min(j["sf"])
             for i, dt in enumerate(horarios_dt):
-                t = dt.hour * 60 + dt.minute
+                t = dt.hour*60 + dt.minute
                 if (e <= t < si) or (ri <= t <= sf):
                     eq[i] += j["q"]
         else:
             sf = str_to_min(j["sf"])
             for i, dt in enumerate(horarios_dt):
-                t = dt.hour * 60 + dt.minute
+                t = dt.hour*60 + dt.minute
                 if e <= t <= sf:
                     eq[i] += j["q"]
     return eq
 
-j_conf = processar_jornadas(confer_fixa)
-j_aux = processar_jornadas(aux_fixa)
-eq_conf = calcular_equipe(j_conf)
-eq_aux = calcular_equipe(j_aux)
+eq_conf = calcular_equipe(processar_jornadas(confer_fixa))
+eq_aux  = calcular_equipe(processar_jornadas(aux_fixa))
 eq_total = [a + b for a, b in zip(eq_conf, eq_aux)]
 
-# =============================================
-# DATAFRAME
-# =============================================
+# DataFrame
 df = pd.DataFrame({
     "Horario": horarios_dt,
     "Horario_Str": horarios_str,
@@ -329,7 +309,7 @@ scale = max_ton / (df["Equipe"].max() + 5) * 0.9
 df["Equipe_Escalada"] = df["Equipe"] * scale
 
 # =============================================
-# GRÁFICO FINAL – EXATAMENTE COMO VOCÊ PEDIU
+# GRÁFICO – EIXO X PERFEITO (sem erro!)
 # =============================================
 fig = go.Figure()
 
@@ -348,32 +328,40 @@ if rotulos:
         if r["Equipe"] > 0:
             fig.add_annotation(x=r["Horario"], y=r["Equipe_Escalada"], text=f"{int(r['Equipe'])}", font=dict(size=10, color="#9B59B6"), showarrow=False, yshift=8)
 
-# EIXO X PERFEITO: horas cheias grandes + horários quebrados menores
+# EIXO X – FORMA QUE FUNCIONA 100% NO PLOTLY ATUAL
 fig.update_xaxes(
-    title="Horário",
     type="date",
+    tickformat="%H:%M",
     tickmode="array",
-    tickvals=[base_date.replace(hour=h) for h in range(24)],
+    tickvals=[base.replace(hour=h) for h in range(24)],
     ticktext=[f"{h:02d}:00" for h in range(24)],
+    tickangle=0,
     tickfont=dict(size=14),
-    minor=dict(
-        tickmode="array",
-        tickvals=df["Horario"].tolist(),
-        ticktext=[h if h not in horas_cheias else "" for h in horarios_str],
-        tickfont=dict(size=10, color="gray")
-    ),
+    # Horários quebrados como anotações (não dá erro)
     showgrid=True,
     gridcolor="lightgray"
 )
 
-fig.update_layout(height=680, barmode="stack", hovermode="x unified", legend=dict(x=0, y=1.1, orientation="h"))
+# Adiciona labels menores para horários quebrados
+for h_str, h_dt in zip(horarios_str, horarios_dt):
+    if h_str not in horas_cheias:
+        fig.add_annotation(x=h_dt, y=0, text=h_str[-5:], xref="x", yref="paper", yanchor="top",
+                           showarrow=False, font=dict(size=9, color="gray"), yshift=-10)
+
+fig.update_layout(
+    height=680,
+    barmode="stack",
+    hovermode="x unified",
+    legend=dict(x=0, y=1.1, orientation="h"),
+    margin=dict(l=60, r=60, t=50, b=80)
+)
 
 st.plotly_chart(fig, use_container_width=True)
 
-# Download
+# Download Excel
 out = io.BytesIO()
 df_out = df[["Horario_Str", "Chegada_Ton", "Saida_Ton", "Equipe"]].copy()
-df_out.columns = ["Horário", "Chegada_Ton", "Saida_Ton", "Equipe"]
+df_out.columns = ["Horário", "Chegada_Ton", "Saída_Ton", "Equipe"]
 with pd.ExcelWriter(out, engine="openpyxl") as writer:
     df_out.to_excel(writer, index=False)
 out.seek(0)
