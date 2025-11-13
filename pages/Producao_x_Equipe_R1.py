@@ -254,6 +254,14 @@ def extrair_producao(texto):
 cheg, said = extrair_producao(texto_producao)
 
 # =============================================
+# FORÇA TODAS AS HORAS INTEIRAS (00:00 até 23:00)
+# =============================================
+horas_inteiras = [f"{h:02d}:00" for h in range(24)]
+for h in horas_inteiras:
+    cheg.setdefault(h, 0)
+    said.setdefault(h, 0)
+
+# =============================================
 # LEITURA JORNADAS
 # =============================================
 def jornadas(t):
@@ -286,17 +294,10 @@ def get_horarios_from_texts(*texts):
 jornadas_conf = jornadas(texto_confer)
 jornadas_aux = jornadas(texto_aux)
 
-# ---------- FORÇA TODAS AS HORAS INTEIRAS (00:00 a 23:00) ----------
-horas_inteiras = [f"{h:02d}:00" for h in range(24)]
-for h in horas_inteiras:
-    cheg.setdefault(h, 0)
-    said.setdefault(h, 0)
-
 todas_horas = set(cheg.keys()) | set(said.keys())
 horas_equipe = get_horarios_from_texts(texto_confer, texto_aux)
 todas_horas.update(horas_equipe)
-
-horarios = sorted(todas_horas, key=min_hora)   # mantém todos os horários quebrados
+horarios = sorted(todas_horas, key=min_hora)   # inclui todos os horários quebrados
 
 def calcular_equipe(jornadas_list, horarios):
     tl = [min_hora(h) for h in horarios]
@@ -344,28 +345,20 @@ scale = y_max / eq_range if eq_range > 0 else 1
 df["Equipe_Escalada"] = df["Equipe"] * scale
 
 # =============================================
-# GRÁFICO (AGORA COM TODOS OS HORÁRIOS VISÍVEIS NO EIXO X)
+# GRÁFICO (100 % ORIGINAL + EIXO X COMPLETO)
 # =============================================
 fig = go.Figure()
 
-fig.add_trace(go.Bar(
-    x=df["Horario"], y=df["Chegada_Ton"],
-    name="Chegada (ton)", marker_color="#90EE90", opacity=0.8
-))
-
-fig.add_trace(go.Bar(
-    x=df["Horario"], y=df["Saida_Ton"],
-    name="Saída (ton)", marker_color="#E74C3C", opacity=0.8
-))
-
-fig.add_trace(go.Scatter(
-    x=df["Horario"], y=df["Equipe_Escalada"],
-    mode="lines+markers", name="Equipe",
-    line=dict(color="#9B59B6", width=4, dash="dot"),
-    marker=dict(size=8),
-    customdata=df["Equipe"],
-    hovertemplate="Equipe: %{customdata}<extra></extra>"
-))
+fig.add_trace(go.Bar(x=df["Horario"], y=df["Chegada_Ton"],
+                     name="Chegada (ton)", marker_color="#90EE90", opacity=0.8))
+fig.add_trace(go.Bar(x=df["Horario"], y=df["Saida_Ton"],
+                     name="Saída (ton)", marker_color="#E74C3C", opacity=0.8))
+fig.add_trace(go.Scatter(x=df["Horario"], y=df["Equipe_Escalada"],
+                         mode="lines+markers", name="Equipe",
+                         line=dict(color="#9B59B6", width=4, dash="dot"),
+                         marker=dict(size=8),
+                         customdata=df["Equipe"],
+                         hovertemplate="Equipe: %{customdata}<extra></extra>"))
 
 if rotulos:
     for _, r in df.iterrows():
@@ -382,39 +375,25 @@ if rotulos:
                                font=dict(color="#9B59B6", size=9), bgcolor="white",
                                bordercolor="#9B59B6", borderwidth=1, showarrow=False, yshift=0, align="center")
 
-# ---------- EIXO X: HORAS CHEIAS (PRINCIPAIS) + HORÁRIOS QUEBRADOS (SECUNDÁRIOS) ----------
-horas_inteiras = [f"{h:02d}:00" for h in range(24)]
-
+# EIXO X: HORAS CHEIAS (principais) + TODOS OS HORÁRIOS QUEBRADOS (secundários)
 fig.update_xaxes(
     title="Horário",
     tickmode="array",
-    tickvals=horas_inteiras,                    # Ticks principais: 00:00, 01:00, ...
+    tickvals=horas_inteiras,
     ticktext=horas_inteiras,
-    tickangle=0,
     tickfont=dict(size=14, color="black"),
-    
-    # Ticks secundários: todos os horários com dados (quebrados)
     minor=dict(
         tickmode="array",
-        tickvals=df["Horario"].tolist(),        # Todos os horários reais (04:05, 21:40, etc)
-        ticktext=[h if h.endswith(("00", "30")) else "" for h in df["Horario"]],  # Mostra só :00 e :30, ou todos se quiser
-        # Ou use: ticktext=df["Horario"].tolist()  → para mostrar TODOS os horários quebrados
-        ticktext=df["Horario"].tolist(),        # ← MUDE AQUI SE QUISER TODOS VISÍVEIS
-        tickfont=dict(size=10, color="gray"),
-        showgrid=True,
-        gridcolor="lightgray",
-        griddash="dot"
+        tickvals=df["Horario"].tolist(),
+        ticktext=df["Horario"].tolist(),   # ← TODOS os horários quebrados aparecem aqui
+        tickfont=dict(size=9, color="gray")
     ),
-    
-    # Grade principal nas horas cheias
     showgrid=True,
-    gridwidth=2,
-    gridcolor="rgba(0,0,0,0.1)"
+    gridcolor="lightgray"
 )
 
+fig.update_yaxes(title="Toneladas | Equipe (escalada)", range=[0, y_max], zeroline=False)
 fig.update_layout(
-    xaxis_title="Horário",
-    yaxis=dict(title="Toneladas | Equipe (escalada)", side="left", range=[0, y_max], zeroline=False),
     height=650,
     hovermode="x unified",
     legend=dict(x=0, y=1.1, orientation="h"),
@@ -425,18 +404,18 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 # =============================================
-# BAIXAR EXCEL
+# DOWNLOAD EXCEL
 # =============================================
 out = io.BytesIO()
 df_export = df[["Horario", "Chegada_Ton", "Saida_Ton", "Equipe", "Equipe_Conf", "Equipe_Aux"]].copy()
-with pd.ExcelWriter(out, engine="openpyxl") as w:
-    df_export.to_excel(w, index=False)
+with pd.ExcelWriter(out, engine="openpyxl") as writer:
+    df_export.to_excel(writer, index=False)
 out.seek(0)
 st.download_button("Baixar Excel", out, "producao_vs_equipe.xlsx",
                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 # =============================================
-# DADOS FIXOS (MOSTRADOS)
+# DADOS FIXOS EXIBIDOS
 # =============================================
 st.markdown("### Dados Fixos Utilizados")
 col1, col2 = st.columns(2)
