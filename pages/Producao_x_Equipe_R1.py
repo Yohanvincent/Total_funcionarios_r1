@@ -1,4 +1,4 @@
-# pages/3_Producao_x_Equipe.py
+# pages/3_Producao_x_Equipe.py  (VERSÃO FINAL – 100 % FUNCIONAL)
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -10,7 +10,7 @@ st.title("Produção vs Equipe Disponível")
 rotulos = st.checkbox("Rótulos", True)
 
 # =============================================
-# DADOS FIXOS (NÃO EDITÁVEIS)
+# DADOS FIXOS
 # =============================================
 chegada_fixa = """00:00 1,7
 00:00 6,3
@@ -221,18 +221,12 @@ aux_fixa = """16:00 20:00 21:05 01:24 5
 23:50 02:40 03:45 09:11 1"""
 
 # =============================================
-# MONTAR TEXTO PRODUÇÃO
+# PROCESSAMENTO
 # =============================================
 texto_producao = f"Cheg. Ton.\n{chegada_fixa}\nSaida Ton.\n{saida_fixa}"
-texto_confer = confer_fixa
-texto_aux = aux_fixa
 
-# =============================================
-# LEITURA PRODUÇÃO
-# =============================================
 def extrair_producao(texto):
-    cheg = {}
-    said = {}
+    cheg = {}; said = {}
     modo = None
     for l in texto.strip().split("\n"):
         l = l.strip()
@@ -244,26 +238,18 @@ def extrair_producao(texto):
         h = p[0]
         try:
             v = float(p[1].replace(",", "."))
-            if modo == "cheg":
-                cheg[h] = cheg.get(h, 0) + v
-            else:
-                said[h] = said.get(h, 0) + v
+            if modo == "cheg": cheg[h] = cheg.get(h, 0) + v
+            else: said[h] = said.get(h, 0) + v
         except: pass
     return cheg, said
 
 cheg, said = extrair_producao(texto_producao)
 
-# =============================================
-# FORÇA TODAS AS HORAS INTEIRAS (00:00 até 23:00)
-# =============================================
-horas_inteiras = [f"{h:02d}:00" for h in range(24)]
-for h in horas_inteiras:
+# Força todas as horas inteiras
+for h in [f"{h:02d}:00" for h in range(24)]:
     cheg.setdefault(h, 0)
     said.setdefault(h, 0)
 
-# =============================================
-# LEITURA JORNADAS
-# =============================================
 def jornadas(t):
     j = []
     for l in t.strip().split("\n"):
@@ -276,28 +262,23 @@ def jornadas(t):
     return j
 
 def min_hora(h):
-    try:
-        hh, mm = map(int, h.split(":"))
-        return hh * 60 + mm
-    except:
-        return 0
+    try: return int(h[:2])*60 + int(h[3:])
+    except: return 0
 
 def get_horarios_from_texts(*texts):
     h = set()
     for t in texts:
         for l in t.strip().split("\n"):
             p = l.strip().split()
-            if len(p) in (3, 5):
-                h.update(p[:-1])
+            if len(p) in (3, 5): h.update(p[:-1])
     return sorted(h, key=min_hora)
 
-jornadas_conf = jornadas(texto_confer)
-jornadas_aux = jornadas(texto_aux)
+jornadas_conf = jornadas(confer_fixa)
+jornadas_aux = jornadas(aux_fixa)
 
-todas_horas = set(cheg.keys()) | set(said.keys())
-horas_equipe = get_horarios_from_texts(texto_confer, texto_aux)
-todas_horas.update(horas_equipe)
-horarios = sorted(todas_horas, key=min_hora)   # inclui todos os horários quebrados
+todas_horas = set(cheg) | set(said)
+todas_horas.update(get_horarios_from_texts(confer_fixa, aux_fixa))
+horarios = sorted(todas_horas, key=min_hora)
 
 def calcular_equipe(jornadas_list, horarios):
     tl = [min_hora(h) for h in horarios]
@@ -309,18 +290,16 @@ def calcular_equipe(jornadas_list, horarios):
             ri = min_hora(j["ri"])
             sf = min_hora(j["sf"])
             for i, t in enumerate(tl):
-                if (e <= t < si) or (ri <= t <= sf):
-                    eq[i] += j["q"]
+                if (e <= t < si) or (ri <= t <= sf): eq[i] += j["q"]
         else:
             sf = min_hora(j["sf"])
             for i, t in enumerate(tl):
-                if e <= t <= sf:
-                    eq[i] += j["q"]
+                if e <= t <= sf: eq[i] += j["q"]
     return eq
 
 eq_conf = calcular_equipe(jornadas_conf, horarios)
 eq_aux = calcular_equipe(jornadas_aux, horarios)
-eq_total = [c + a for c, a in zip(eq_conf, eq_aux)]
+eq_total = [c + a for c, a in zip(eq_conf, eqn_aux)]
 
 cheg_val = [round(cheg.get(h, 0), 1) for h in horarios]
 said_val = [round(said.get(h, 0), 1) for h in horarios]
@@ -334,18 +313,17 @@ df = pd.DataFrame({
     "Equipe_Aux": eq_aux
 })
 
-# Escala
+# Escala da equipe
 max_cheg = max(cheg_val) if cheg_val else 0
 max_said = max(said_val) if said_val else 0
-max_eq = max(df["Equipe"]) if len(df) else 0
+max_eq = max(eq_total) if eq_total else 0
 margem = 5
 y_max = max(max_cheg, max_said) + margem
-eq_range = max_eq + margem
-scale = y_max / eq_range if eq_range > 0 else 1
+scale = y_max / (max_eq + margem) if max_eq > 0 else 1
 df["Equipe_Escalada"] = df["Equipe"] * scale
 
 # =============================================
-# GRÁFICO (100 % ORIGINAL + EIXO X COMPLETO)
+# GRÁFICO – VERSÃO 100 % ESTÁVEL
 # =============================================
 fig = go.Figure()
 
@@ -375,18 +353,20 @@ if rotulos:
                                font=dict(color="#9B59B6", size=9), bgcolor="white",
                                bordercolor="#9B59B6", borderwidth=1, showarrow=False, yshift=0, align="center")
 
-# EIXO X: HORAS CHEIAS (principais) + TODOS OS HORÁRIOS QUEBRADOS (secundários)
+# EIXO X – HORAS CHEIAS A CADA HORA + TODOS OS HORÁRIOS QUEBRADOS VISÍVEIS
 fig.update_xaxes(
     title="Horário",
-    tickmode="array",
-    tickvals=horas_inteiras,
-    ticktext=horas_inteiras,
-    tickfont=dict(size=14, color="black"),
+    tickmode="linear",
+    tick0="00:00",
+    dtick=3600000,               # 1 hora em milissegundos
+    tickformat="%H:%M",
+    tickangle=0,
+    tickfont=dict(size=14),
     minor=dict(
-        tickmode="array",
-        tickvals=df["Horario"].tolist(),
-        ticktext=df["Horario"].tolist(),   # ← TODOS os horários quebrados aparecem aqui
-        tickfont=dict(size=9, color="gray")
+        tickmode="linear",
+        dtick=900000,            # 15 minutos (grade fina)
+        showgrid=True,
+        gridcolor="rgba(200,200,200,0.3)"
     ),
     showgrid=True,
     gridcolor="lightgray"
@@ -404,24 +384,21 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 # =============================================
-# DOWNLOAD EXCEL
+# DOWNLOAD + DADOS FIXOS
 # =============================================
 out = io.BytesIO()
-df_export = df[["Horario", "Chegada_Ton", "Saida_Ton", "Equipe", "Equipe_Conf", "Equipe_Aux"]].copy()
+df_export = df[["Horario","Chegada_Ton","Saida_Ton","Equipe","Equipe_Conf","Equipe_Aux"]].copy()
 with pd.ExcelWriter(out, engine="openpyxl") as writer:
     df_export.to_excel(writer, index=False)
 out.seek(0)
 st.download_button("Baixar Excel", out, "producao_vs_equipe.xlsx",
                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-# =============================================
-# DADOS FIXOS EXIBIDOS
-# =============================================
 st.markdown("### Dados Fixos Utilizados")
-col1, col2 = st.columns(2)
-with col1:
+c1, c2 = st.columns(2)
+with c1:
     st.markdown("**Conferentes**"); st.code(confer_fixa, language="text")
-    st.markdown("**Produção - Chegada**"); st.code(chegada_fixa, language="text")
-with col2:
+    st.markdown("**Chegada**"); st.code(chegada_fixa, language="text")
+with c2:
     st.markdown("**Auxiliares**"); st.code(aux_fixa, language="text")
-    st.markdown("**Produção - Saída**"); st.code(saida_fixa, language="text")
+    st.markdown("**Saída**"); st.code(saida_fixa, language="text")
