@@ -2,8 +2,8 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-import io
 from datetime import datetime, time, timedelta
+import io
 
 st.set_page_config(layout="wide")
 st.title("Produção vs Equipe Disponível – R1")
@@ -11,7 +11,7 @@ st.title("Produção vs Equipe Disponível – R1")
 rotulos = st.checkbox("Rótulos", True)
 
 # =============================================
-# DADOS FIXOS
+# DADOS FIXOS (seus dados originais)
 # =============================================
 chegada_fixa = """00:00 1,7
 00:00 6,3
@@ -222,186 +222,144 @@ aux_fixa = """16:00 20:00 21:05 01:24 5
 23:50 02:40 03:45 09:11 1"""
 
 # =============================================
-# FUNÇÕES AUXILIARES
+# FUNÇÕES
 # =============================================
-def str_to_time(h):
-    return datetime.strptime(h, "%H:%M").time()
+def str_to_minutes(h):
+    hh, mm = map(int, h.split(":"))
+    return hh * 60 + mm
 
-def time_to_datetime(t):
-    today = datetime.today().date()
-    return datetime.combine(today, t)
-
-# =============================================
-# PROCESSAMENTO DOS DADOS
-# =============================================
-def extrair_producao(texto):
-    cheg = {}; said = {}
-    modo = None
-    for l in texto.strip().split("\n"):
-        l = l.strip()
-        if l == "Cheg. Ton.": modo = "cheg"; continue
-        if l == "Saida Ton.": modo = "said"; continue
-        if not l: continue
-        p = l.split()
-        if len(p) < 2: continue
-        h = p[0]
-        try:
-            v = float(p[1].replace(",", "."))
-            if modo == "cheg":
-                cheg[h] = cheg.get(h, 0) + v
-            else:
-                said[h] = said.get(h, 0) + v
-        except: pass
+def extrair_producao():
+    cheg = {}
+    said = {}
+    for linha in chegada_fixa.split("\n"):
+        if not linha.strip(): continue
+        h, v = linha.split()[:2]
+        cheg[h] = cheg.get(h, 0) + float(v.replace(",", "."))
+    for linha in saida_fixa.split("\n"):
+        if not linha.strip(): continue
+        h, v = linha.split()[:2]
+        said[h] = said.get(h, 0) + float(v.replace(",", "."))
     return cheg, said
 
-cheg, said = extrair_producao(f"Cheg. Ton.\n{chegada_fixa}\nSaida Ton.\n{saida_fixa}")
+cheg, said = extrair_producao()
 
-# Criar lista completa de horários (de 00:00 até 23:45, de 15 em 15 min)
-base_times = []
-current = time(0, 0)
-while current <= time(23, 45):
-    base_times.append(current.strftime("%H:%M"))
-    minutes = current.minute + 15
-    hour_add = minutes // 60
-    minutes = minutes % 60
-    current = time(current.hour + hour_add, minutes)
+# Todos os horários que existem (produção + jornadas)
+horarios_set = set(cheg.keys()) | set(said.keys())
+for texto in [confer_fixa, aux_fixa]:
+    for palavra in texto.split():
+        if ":" in palavra and len(palavra) == 5:
+            horarios_set.add(palavra)
 
-# Adicionar todos os horários reais que existem nos dados
-todos_horarios = set(base_times)
-for h in cheg.keys(): todos_horarios.add(h)
-for h in said.keys(): todos_horarios.add(h)
+# Forçar todas as horas cheias
+for h in range(24):
+    hora = f"{h:02d}:00"
+    horarios_set.add(hora)
+    cheg[hora] = cheg.get(hora, 0)
+    said[hora] = said.get(hora, 0)
 
-# Adicionar horários das jornadas
-for text in [confer_fixa, aux_fixa]:
-    for l in text.split("\n"):
-        parts = l.strip().split()
-        for p in parts[:-1]:
-            if ":" in p and len(p) == 5:
-                todos_horarios.add(p)
+horarios_str = sorted(horarios_set, key=str_to_minutes)
 
-horarios_str = sorted(todos_horarios, key=str_to_time)
-horarios_dt = [time_to_datetime(str_to_time(h, h) for h in horarios_str]
+# Converter para datetime (só para o Plotly)
+base_date = datetime(2024, 1, 1)
+horarios_dt = [base_date.replace(hour=int(h.split(":")[0]), minute=int(h.split(":")[1])) for h in horarios_str]
 
-# Calcular equipe
-def calcular_equipe(jornadas_list):
-    eq = [0] * len(horarios_dt)
-    for j in jornadas_list:
-        e = str_to_time(j["e"])
-        e_min = e.hour * 60 + e.minute
-        if j["t"] == "c":
-            si = str_to_time(j["si"])
-            ri = str_to_time(j["ri"])
-            sf = str_to_time(j["sf"])
-            si_min = si.hour * 60 + si.minute
-            ri_min = ri.hour * 60 + ri.minute
-            sf_min = sf.hour * 60 + sf.minute
-            for i, dt in enumerate(horarios_dt):
-                t_min = dt.hour * 60 + dt.minute
-                if (e_min <= t_min < si_min) or (ri_min <= t_min <= sf_min):
-                    eq[i] += j["q"]
-        else:
-            sf = str_to_time(j["sf"])
-            sf_min = sf.hour * 60 + sf.minute
-            for i, dt in enumerate(horarios_dt):
-                t_min = dt.hour * 60 + dt.minute
-                if e_min <= t_min <= sf_min:
-                    eq[i] += j["q"]
-    return eq
-
-# Processar jornadas
+# =============================================
+# JORNADAS E EQUIPE
+# =============================================
 def processar_jornadas(texto):
-    j = []
-    for l in texto.strip().split("\n"):
-        p = l.strip().split()
-        if len(p) == 5 and p[4].isdigit():
-            j.append({"t": "c", "e": p[0], "si": p[1], "ri": p[2], "sf": p[3], "q": int(p[4])})
-        elif len(p) == 3 and p[2].isdigit():
-            j.append({"t": "m", "e": p[0], "sf": p[1], "q": int(p[2])})
-    return j
+    jornadas = []
+    for linha in texto.strip().split("\n"):
+        partes = linha.split()
+        if len(partes) == 5 and partes[4].isdigit():
+            jornadas.append({"e": partes[0], "si": partes[1], "ri": partes[2], "sf": partes[3], "q": int(partes[4])})
+        elif len(partes) == 3 and partes[2].isdigit():
+            jornadas.append({"e": partes[0], "sf": partes[1], "q": int(partes[2])})
+    return jornadas
 
-eq_conf = calcular_equipe(processar_jornadas(confer_fixa))
-eq_aux = calcular_equipe(processar_jornadas(aux_fixa))
+jornadas_conf = processar_jornadas(confer_fixa)
+jornadas_aux = processar_jornadas(aux_fixa)
+
+def calcular_equipe(jornadas):
+    equipe = [0] * len(horarios_dt)
+    for j in jornadas:
+        entrada = str_to_minutes(j["e"])
+        if "si" in j:  # jornada com intervalo
+            saida_intervalo = str_to_minutes(j["si"])
+            retorno = str_to_minutes(j["ri"])
+            saida_final = str_to_minutes(j["sf"])
+            for i, dt in enumerate(horarios_dt):
+                t = dt.hour * 60 + dt.minute
+                if (entrada <= t < saida_intervalo) or (retorno <= t <= saida_final):
+                    equipe[i] += j["q"]
+        else:
+            saida_final = str_to_minutes(j["sf"])
+            for i, dt in enumerate(horarios_dt):
+                t = dt.hour * 60 + dt.minute
+                if entrada <= t <= saida_final:
+                    equipe[i] += j["q"]
+    return equipe
+
+eq_conf = calcular_equipe(jornadas_conf)
+eq_aux = calcular_equipe(jornadas_aux)
 eq_total = [a + b for a, b in zip(eq_conf, eq_aux)]
 
-# Valores de produção
-cheg_val = [round(cheg.get(h, 0), 1) for h in horarios_str]
-said_val = [round(said.get(h, 0), 1) for h in horarios_str]
-
-# DataFrame
+# =============================================
+# DATAFRAME
+# =============================================
 df = pd.DataFrame({
     "Horario": horarios_dt,
     "Horario_Str": horarios_str,
-    "Chegada_Ton": cheg_val,
-    "Saida_Ton": said_val,
+    "Chegada": [round(cheg.get(h, 0), 1) for h in horarios_str],
+    "Saida": [round(said.get(h, 0), 1) for h in horarios_str],
     "Equipe": eq_total
 })
 
-# Escala equipe
-max_ton = max(max(cheg_val), max(said_val), 1)
-max_eq = max(eq_total, default=1)
-scale = max_ton / max_eq * 0.9
-df["Equipe_Escalada"] = df["Equipe"] * scale
+# Escala da linha de equipe
+max_ton = max(df["Chegada"].max(), df["Saida"].max(), 1)
+scale = max_ton / (df["Equipe"].max() + 5) * 0.9
+df["Equipe_Esc"] = df["Equipe"] * scale
 
 # =============================================
-# GRÁFICO
+# GRÁFICO FINAL
 # =============================================
 fig = go.Figure()
 
-fig.add_trace(go.Bar(
-    x=df["Horario"], y=df["Chegada_Ton"],
-    name="Chegada (ton)", marker_color="#90EE90", opacity=0.8
-))
-fig.add_trace(go.Bar(
-    x=df["Horario"], y=df["Saida_Ton"],
-    name="Saída (ton)", marker_color="#E74C3C", opacity=0.8
-))
-fig.add_trace(go.Scatter(
-    x=df["Horario"], y=df["Equipe_Escalada"],
-    mode="lines+markers", name="Equipe",
-    line=dict(color="#9B59B6", width=4, dash="dot"),
-    marker=dict(size=8),
-    customdata=df["Equipe"],
-    hovertemplate="Equipe: %{customdata}<extra></extra>"
-))
+fig.add_trace(go.Bar(x=df["Horario"], y=df["Chegada"], name="Chegada (ton)", marker_color="#90EE90"))
+fig.add_trace(go.Bar(x=df["Horario"], y=df["Saida"], name="Saída (ton)", marker_color="#E74C3C"))
+fig.add_trace(go.Scatter(x=df["Horario"], y=df["Equipe_Esc"], mode="lines+markers",
+                         name="Equipe", line=dict(color="#9B59B6", width=4, dash="dot"),
+                         customdata=df["Equipe"], hovertemplate="Equipe: %{customdata}"))
 
 if rotulos:
     for _, row in df.iterrows():
-        if row["Chegada_Ton"] > 0:
-            fig.add_annotation(x=row["Horario"], y=row["Chegada_Ton"], text=str(row["Chegada_Ton"]),
-                               font=dict(size=9, color="green"), showarrow=False, yshift=10)
-        if row["Saida_Ton"] > 0:
-            fig.add_annotation(x=row["Horario"], y=row["Saida_Ton"], text=str(row["Saida_Ton"]),
+        if row["Chegada"] > 0:
+            fig.add_annotation(x=row["Horario"], y=row["Chegada"], text=str(row["Chegada"]),
+                               font=dict(size=9), showarrow=False, yshift=10)
+        if row["Saida"] > 0:
+            fig.add_annotation(x=row["Horario"], y=row["Saida"], text=str(row["Saida"]),
                                font=dict(size=9, color="red"), showarrow=False, yshift=10)
-        if row["Equipe">
-            fig.add_annotation(x=row["Horario"], y=row["Equipe_Escalada"], text=str(int(row["Equipe"])),
-                               font=dict(size=9, color="#9B59B6"), showarrow=False, yshift=8)
+        if row["Equipe"] > 0:
+            fig.add_annotation(x=row["Horario"], y=row["Equipe_Esc"], text=str(int(row["Equipe"])),
+                               font=dict(size=10, color="#9B59B6"), showarrow=False, yshift=8)
 
-# EIXO X PERFEITO
 fig.update_xaxes(
     title="Horário",
-    type="date",
     tickformat="%H:%M",
-    tickangle=0,
-    tick0="2024-01-01 00:00",
     dtick=3600000,  # 1 hora
-    minor=dict(dtick=900000, showgrid=True, gridcolor="rgba(0,0,0,0.1)")
+    tickangle=0,
+    minor=dict(dtick=900000, showgrid=True, gridcolor="lightgray")
 )
 
-fig.update_layout(
-    height=650,
-    barmode="stack",
-    hovermode="x unified",
-    legend=dict(x=0, y=1.1, orientation="h"),
-    margin=dict(l=50, r=50, t=50, b=80)
-)
+fig.update_layout(height=650, barmode="stack", hovermode="x unified", legend=dict(x=0, y=1.1, orientation="h"))
 
 st.plotly_chart(fig, use_container_width=True)
 
-# Download
+# =============================================
+# DOWNLOAD
+# =============================================
 out = io.BytesIO()
-df_export = df.copy()
-df_export["Horario"] = df_export["Horario_Str"]
-df_export = df_export[["Horario", "Chegada_Ton", "Saida_Ton", "Equipe"]]
+df_export = df[["Horario_Str", "Chegada", "Saida", "Equipe"]].copy()
+df_export.columns = ["Horário", "Chegada (ton)", "Saída (ton)", "Equipe"]
 with pd.ExcelWriter(out, engine="openpyxl") as writer:
     df_export.to_excel(writer, index=False)
 out.seek(0)
