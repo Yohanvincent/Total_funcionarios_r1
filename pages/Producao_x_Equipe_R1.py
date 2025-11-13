@@ -1,4 +1,4 @@
-# pages/3_Producao_x_Equipe.py  (VERSÃO FINAL – 100 % FUNCIONAL)
+# pages/3_Producao_x_Equipe.py  (VERSÃO FINAL – SEM ERROS)
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -221,7 +221,7 @@ aux_fixa = """16:00 20:00 21:05 01:24 5
 23:50 02:40 03:45 09:11 1"""
 
 # =============================================
-# PROCESSAMENTO
+# PROCESSAMENTO DOS DADOS
 # =============================================
 texto_producao = f"Cheg. Ton.\n{chegada_fixa}\nSaida Ton.\n{saida_fixa}"
 
@@ -238,8 +238,10 @@ def extrair_producao(texto):
         h = p[0]
         try:
             v = float(p[1].replace(",", "."))
-            if modo == "cheg": cheg[h] = cheg.get(h, 0) + v
-            else: said[h] = said.get(h, 0) + v
+            if modo == "cheg":
+                cheg[h] = cheg.get(h, 0) + v
+            else:
+                said[h] = said.get(h, 0) + v
         except: pass
     return cheg, said
 
@@ -290,16 +292,18 @@ def calcular_equipe(jornadas_list, horarios):
             ri = min_hora(j["ri"])
             sf = min_hora(j["sf"])
             for i, t in enumerate(tl):
-                if (e <= t < si) or (ri <= t <= sf): eq[i] += j["q"]
+                if (e <= t < si) or (ri <= t <= sf):
+                    eq[i] += j["q"]
         else:
             sf = min_hora(j["sf"])
             for i, t in enumerate(tl):
-                if e <= t <= sf: eq[i] += j["q"]
+                if e <= t <= sf:
+                    eq[i] += j["q"]
     return eq
 
 eq_conf = calcular_equipe(jornadas_conf, horarios)
 eq_aux = calcular_equipe(jornadas_aux, horarios)
-eq_total = [c + a for c, a in zip(eq_conf, eqn_aux)]
+eq_total = [c + a for c, a in zip(eq_conf, eq_aux)]   # ← CORRIGIDO: eq_aux
 
 cheg_val = [round(cheg.get(h, 0), 1) for h in horarios]
 said_val = [round(said.get(h, 0), 1) for h in horarios]
@@ -323,7 +327,7 @@ scale = y_max / (max_eq + margem) if max_eq > 0 else 1
 df["Equipe_Escalada"] = df["Equipe"] * scale
 
 # =============================================
-# GRÁFICO – VERSÃO 100 % ESTÁVEL
+# GRÁFICO – FINAL E ESTÁVEL
 # =============================================
 fig = go.Figure()
 
@@ -353,20 +357,20 @@ if rotulos:
                                font=dict(color="#9B59B6", size=9), bgcolor="white",
                                bordercolor="#9B59B6", borderwidth=1, showarrow=False, yshift=0, align="center")
 
-# EIXO X – HORAS CHEIAS A CADA HORA + TODOS OS HORÁRIOS QUEBRADOS VISÍVEIS
+# EIXO X – horas cheias + todos os horários quebrados visíveis
 fig.update_xaxes(
     title="Horário",
     tickmode="linear",
     tick0="00:00",
-    dtick=3600000,               # 1 hora em milissegundos
+    dtick=3600000,          # 1 hora
     tickformat="%H:%M",
     tickangle=0,
     tickfont=dict(size=14),
     minor=dict(
         tickmode="linear",
-        dtick=900000,            # 15 minutos (grade fina)
+        dtick=900000,       # grade de 15 min
         showgrid=True,
-        gridcolor="rgba(200,200,200,0.3)"
+        gridcolor="rgba(200,200,200,0.2)"
     ),
     showgrid=True,
     gridcolor="lightgray"
@@ -384,7 +388,7 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 # =============================================
-# DOWNLOAD + DADOS FIXOS
+# DOWNLOAD EXCEL
 # =============================================
 out = io.BytesIO()
 df_export = df[["Horario","Chegada_Ton","Saida_Ton","Equipe","Equipe_Conf","Equipe_Aux"]].copy()
@@ -394,6 +398,9 @@ out.seek(0)
 st.download_button("Baixar Excel", out, "producao_vs_equipe.xlsx",
                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
+# =============================================
+# DADOS FIXOS
+# =============================================
 st.markdown("### Dados Fixos Utilizados")
 c1, c2 = st.columns(2)
 with c1:
