@@ -1,24 +1,17 @@
-# Producao_x_Equipe_R1.py
+# pages/3_Producao_x_Equipe.py
 import streamlit as st
-import plotly.graph_objects as go
 import pandas as pd
-from datetime import datetime, timedelta
+import plotly.graph_objects as go
+import io
 
-# -------------------------------------------------
-# CONFIGURAÇÃO DA PÁGINA
-# -------------------------------------------------
-st.set_page_config(page_title="Logística – Produção vs Equipe R1", layout="wide")
+st.set_page_config(layout="wide")
+st.title("Produção vs Equipe Disponível")
 
-# -------------------------------------------------
-# FUNÇÃO AUXILIAR: string → datetime (data fixa 2025-11-12)
-# -------------------------------------------------
-def hora_to_datetime(hora_str: str, data_base: str = "2025-11-12") -> datetime:
-    h = datetime.strptime(hora_str, "%H:%M").time()
-    return datetime.combine(datetime.strptime(data_base, "%Y-%m-%d").date(), h)
+rotulos = st.checkbox("Rótulos", True)
 
-# -------------------------------------------------
-# DADOS FIXOS (100% ORIGINAIS – NÃO EDITÁVEIS)
-# -------------------------------------------------
+# =============================================
+# DADOS FIXOS (NÃO EDITÁVEIS)
+# =============================================
 chegada_fixa = """00:00 1,7
 00:00 6,3
 00:20 14,9
@@ -227,160 +220,210 @@ aux_fixa = """16:00 20:00 21:05 01:24 5
 23:30 03:30 04:35 08:49 25
 23:50 02:40 03:45 09:11 1"""
 
-# -------------------------------------------------
-# PARSE DOS DADOS
-# -------------------------------------------------
-def parse_producao(texto: str) -> pd.DataFrame:
-    linhas = [l.strip() for l in texto.splitlines() if l.strip()]
-    rows = []
-    for linha in linhas:
-        partes = linha.split()
-        hora = partes[0]
-        valor = float(partes[1].replace(",", "."))
-        rows.append({"hora": hora_to_datetime(hora), "valor": valor})
-    df = pd.DataFrame(rows)
-    # Agrupar por hora e somar (evita duplicatas)
-    df = df.groupby("hora")["valor"].sum().reset_index()
-    return df
+# =============================================
+# MONTAR TEXTO PRODUÇÃO
+# =============================================
+texto_producao = f"Cheg. Ton.\n{chegada_fixa}\nSaida Ton.\n{saida_fixa}"
+texto_confer = confer_fixa
+texto_aux = aux_fixa
 
-def parse_equipe(texto: str) -> pd.DataFrame:
-    linhas = [l.strip() for l in texto.splitlines() if l.strip()]
-    rows = []
-    for linha in linhas:
-        partes = linha.split()
-        if len(partes) == 3:
-            inicio, fim, qtd_str = partes
-            qtd = int(qtd_str)
+# =============================================
+# LEITURA PRODUÇÃO
+# =============================================
+def extrair_producao(texto):
+    cheg = {}
+    said = {}
+    modo = None
+    for l in texto.strip().split("\n"):
+        l = l.strip()
+        if l == "Cheg. Ton.": modo = "cheg"; continue
+        if l == "Saida Ton.": modo = "said"; continue
+        if not l or modo is None: continue
+        p = l.split()
+        if len(p) < 2: continue
+        h = p[0]
+        try:
+            v = float(p[1].replace(",", "."))
+            if modo == "cheg":
+                cheg[h] = cheg.get(h, 0) + v
+            else:
+                said[h] = said.get(h, 0) + v
+        except: pass
+    return cheg, said
+
+cheg, said = extrair_producao(texto_producao)
+
+# =============================================
+# LEITURA JORNADAS
+# =============================================
+def jornadas(t):
+    j = []
+    for l in t.strip().split("\n"):
+        p = l.strip().split()
+        if not p: continue
+        if len(p) == 5 and p[4].isdigit():
+            j.append({"t": "c", "e": p[0], "si": p[1], "ri": p[2], "sf": p[3], "q": int(p[4])})
+        elif len(p) == 3 and p[2].isdigit():
+            j.append({"t": "m", "e": p[0], "sf": p[1], "q": int(p[2])})
+    return j
+
+def min_hora(h):
+    try:
+        hh, mm = map(int, h.split(":"))
+        return hh * 60 + mm
+    except:
+        return 0
+
+def get_horarios_from_texts(*texts):
+    h = set()
+    for t in texts:
+        for l in t.strip().split("\n"):
+            p = l.strip().split()
+            if len(p) in (3, 5):
+                h.update(p[:-1])
+    return sorted(h, key=min_hora)
+
+jornadas_conf = jornadas(texto_confer)
+jornadas_aux = jornadas(texto_aux)
+
+# ---------- FORÇA TODAS AS HORAS INTEIRAS (00:00 a 23:00) ----------
+horas_inteiras = [f"{h:02d}:00" for h in range(24)]
+for h in horas_inteiras:
+    cheg.setdefault(h, 0)
+    said.setdefault(h, 0)
+
+todas_horas = set(cheg.keys()) | set(said.keys())
+horas_equipe = get_horarios_from_texts(texto_confer, texto_aux)
+todas_horas.update(horas_equipe)
+
+horarios = sorted(todas_horas, key=min_hora)   # mantém todos os horários quebrados
+
+def calcular_equipe(jornadas_list, horarios):
+    tl = [min_hora(h) for h in horarios]
+    eq = [0] * len(tl)
+    for j in jornadas_list:
+        e = min_hora(j["e"])
+        if j["t"] == "c":
+            si = min_hora(j["si"])
+            ri = min_hora(j["ri"])
+            sf = min_hora(j["sf"])
+            for i, t in enumerate(tl):
+                if (e <= t < si) or (ri <= t <= sf):
+                    eq[i] += j["q"]
         else:
-            inicio, fim, _, _, qtd_str = partes[:5]
-            qtd = int(qtd_str)
+            sf = min_hora(j["sf"])
+            for i, t in enumerate(tl):
+                if e <= t <= sf:
+                    eq[i] += j["q"]
+    return eq
 
-        start = hora_to_datetime(inicio)
-        end = hora_to_datetime(fim)
-        cur = start
-        while cur <= end:
-            rows.append({"hora": cur, "disponivel": qtd})
-            cur += timedelta(hours=1)
-    df = pd.DataFrame(rows)
-    # Somar equipe por hora (evita duplicatas)
-    df = df.groupby("hora")["disponivel"].sum().reset_index()
-    return df
+eq_conf = calcular_equipe(jornadas_conf, horarios)
+eq_aux = calcular_equipe(jornadas_aux, horarios)
+eq_total = [c + a for c, a in zip(eq_conf, eq_aux)]
 
-# -------------------------------------------------
-# CÁLCULO FINAL
-# -------------------------------------------------
-@st.cache_data
-def calcular_dados():
-    # ---- produção (chegada - saída) ----
-    df_chegada = parse_producao(chegada_fixa)
-    df_saida   = parse_producao(saida_fixa)
+cheg_val = [round(cheg.get(h, 0), 1) for h in horarios]
+said_val = [round(said.get(h, 0), 1) for h in horarios]
 
-    df_chegada["movimento"] = df_chegada["valor"]
-    df_saida["movimento"]   = -df_saida["valor"]
+df = pd.DataFrame({
+    "Horario": horarios,
+    "Chegada_Ton": cheg_val,
+    "Saida_Ton": said_val,
+    "Equipe": eq_total,
+    "Equipe_Conf": eq_conf,
+    "Equipe_Aux": eq_aux
+})
 
-    df_mov = pd.concat([df_chegada, df_saida], ignore_index=True)
-    df_mov = df_mov.groupby("hora")["movimento"].sum().reset_index()
-    df_mov = df_mov.sort_values("hora")
-    df_mov["acumulado"] = df_mov["movimento"].cumsum()
+# Escala
+max_cheg = max(cheg_val) if cheg_val else 0
+max_said = max(said_val) if said_val else 0
+max_eq = max(df["Equipe"]) if len(df) else 0
+margem = 5
+y_max = max(max_cheg, max_said) + margem
+eq_range = max_eq + margem
+scale = y_max / eq_range if eq_range > 0 else 1
+df["Equipe_Escalada"] = df["Equipe"] * scale
 
-    # ---- equipe (conferentes + auxiliares) ----
-    df_confer = parse_equipe(confer_fixa)
-    df_aux    = parse_equipe(aux_fixa)
-    df_equipe = pd.concat([df_confer, df_aux], ignore_index=True)
-    df_equipe = df_equipe.groupby("hora")["disponivel"].sum().reset_index()
-
-    return df_mov[["hora", "acumulado"]], df_equipe
-
-# -------------------------------------------------
-# PREPARAÇÃO PARA GRÁFICO HOURLY (00:00–23:00)
-# -------------------------------------------------
-def preparar_hourly(df, col, start, end):
-    hourly = pd.date_range(start, end, freq="1H")
-    df_h = df.set_index("hora").reindex(hourly).reset_index()
-    df_h[col] = df_h[col].fillna(0)
-    df_h.columns = ["hora", col]
-    return df_h
-
-# -------------------------------------------------
-# INTERFACE
-# -------------------------------------------------
-st.title("Produção vs Equipe Disponível – R1")
-
-acumulado, equipe = calcular_dados()
-
-start_day = datetime(2025, 11, 12, 0, 0)
-end_day   = datetime(2025, 11, 12, 23, 0)
-
-# Preparar dados hourly
-acum_h = preparar_hourly(acumulado, "acumulado", start_day, end_day)
-equipe_h = preparar_hourly(equipe, "disponivel", start_day, end_day)
-
-# ---------- GRÁFICO ----------
+# =============================================
+# GRÁFICO (100 % IGUAL AO ORIGINAL)
+# =============================================
 fig = go.Figure()
 
-fig.add_trace(
-    go.Scatter(
-        x=equipe_h["hora"],
-        y=equipe_h["disponivel"],
-        mode="lines+markers",
-        name="Equipe Disponível",
-        line=dict(color="#1f77b4", width=2),
-        marker=dict(size=6),
-    )
-)
+fig.add_trace(go.Bar(
+    x=df["Horario"], y=df["Chegada_Ton"],
+    name="Chegada (ton)", marker_color="#90EE90", opacity=0.8
+))
 
-fig.add_trace(
-    go.Scatter(
-        x=acum_h["hora"],
-        y=acum_h["acumulado"],
-        mode="lines+markers",
-        name="Acumulação Líquida (t)",
-        line=dict(color="#2ca02c", width=2),
-        marker=dict(size=6),
-    )
-)
+fig.add_trace(go.Bar(
+    x=df["Horario"], y=df["Saida_Ton"],
+    name="Saída (ton)", marker_color="#E74C3C", opacity=0.8
+))
 
-# Eixo X: 1h em 1h + grade fina
+fig.add_trace(go.Scatter(
+    x=df["Horario"], y=df["Equipe_Escalada"],
+    mode="lines+markers", name="Equipe",
+    line=dict(color="#9B59B6", width=4, dash="dot"),
+    marker=dict(size=8),
+    customdata=df["Equipe"],
+    hovertemplate="Equipe: %{customdata}<extra></extra>"
+))
+
+if rotulos:
+    for _, r in df.iterrows():
+        if r["Chegada_Ton"] > 0:
+            fig.add_annotation(x=r["Horario"], y=r["Chegada_Ton"], text=f"{r['Chegada_Ton']}",
+                               font=dict(color="#2ECC71", size=9), bgcolor="white",
+                               bordercolor="#90EE90", borderwidth=1, showarrow=False, yshift=10)
+        if r["Saida_Ton"] > 0:
+            fig.add_annotation(x=r["Horario"], y=r["Saida_Ton"], text=f"{r['Saida_Ton']}",
+                               font=dict(color="#E74C3C", size=9), bgcolor="white",
+                               bordercolor="#E74C3C", borderwidth=1, showarrow=False, yshift=10)
+        if r["Equipe"] > 0:
+            fig.add_annotation(x=r["Horario"], y=r["Equipe_Escalada"], text=f"{int(r['Equipe'])}",
+                               font=dict(color="#9B59B6", size=9), bgcolor="white",
+                               bordercolor="#9B59B6", borderwidth=1, showarrow=False, yshift=0, align="center")
+
+# ---------- EIXO X FIXO DE HORA EM HORA ----------
 fig.update_xaxes(
-    title="Hora do Dia",
-    type="date",
-    tickformat="%H:%M",
-    tickmode="linear",
-    dtick=3600 * 1000,
-    range=[start_day, end_day],
+    title="Horário",
+    tickmode="array",
+    tickvals=horas_inteiras,          # 00:00, 01:00, ..., 23:00
+    ticktext=horas_inteiras,
     minor=dict(
-        tickmode="linear",
-        dtick=300 * 1000,
+        tickmode="auto",
+        nticks=12,
         showgrid=True,
-        gridcolor="lightgray",
-    ),
+        gridcolor="lightgray"
+    )
 )
 
-fig.update_yaxes(title="Quantidade")
 fig.update_layout(
-    title="Produção vs Equipe Disponível – R1",
-    hovermode="x unified",
-    xaxis_rangeslider_visible=True,
-    height=650,
-    legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
+    xaxis_title="Horário",
+    yaxis=dict(title="Toneladas | Equipe (escalada)", side="left", range=[0, y_max], zeroline=False),
+    height=650, hovermode="x unified", legend=dict(x=0, y=1.1, orientation="h"),
+    barmode="stack", margin=dict(l=60, r=60, t=40, b=60)
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
-# ---------- RENOMEAR EIXOS ----------
-with st.expander("Renomear eixos (opcional)"):
-    col1, col2 = st.columns(2)
-    with col1:
-        novo_x = st.text_input("Título eixo X", value="Hora do Dia")
-    with col2:
-        novo_y = st.text_input("Título eixo Y", value="Quantidade")
-    if st.button("Aplicar"):
-        fig.update_xaxes(title=novo_x)
-        fig.update_yaxes(title=novo_y)
-        st.plotly_chart(fig, use_container_width=True)
+# =============================================
+# BAIXAR EXCEL
+# =============================================
+out = io.BytesIO()
+df_export = df[["Horario", "Chegada_Ton", "Saida_Ton", "Equipe", "Equipe_Conf", "Equipe_Aux"]].copy()
+with pd.ExcelWriter(out, engine="openpyxl") as w:
+    df_export.to_excel(w, index=False)
+out.seek(0)
+st.download_button("Baixar Excel", out, "producao_vs_equipe.xlsx",
+                   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-st.caption(
-    "• **Dados 100% originais** – duplicatas somadas\n"
-    "• **Eixo X**: 1h em 1h + grade fina (5 min)\n"
-    "• **Dia completo**: 00:00 a 23:00"
-)
+# =============================================
+# DADOS FIXOS (MOSTRADOS)
+# =============================================
+st.markdown("### Dados Fixos Utilizados")
+col1, col2 = st.columns(2)
+with col1:
+    st.markdown("**Conferentes**"); st.code(confer_fixa, language="text")
+    st.markdown("**Produção - Chegada**"); st.code(chegada_fixa, language="text")
+with col2:
+    st.markdown("**Auxiliares**"); st.code(aux_fixa, language="text")
+    st.markdown("**Produção - Saída**"); st.code(saida_fixa, language="text")
