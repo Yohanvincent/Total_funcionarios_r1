@@ -3,3 +3,6 @@ plotly
 pandas
 openpyxl
 PyYAML
+scikit-learn
+matplotlib
+numpy
