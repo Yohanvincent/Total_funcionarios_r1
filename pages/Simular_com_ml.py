@@ -5,94 +5,99 @@ from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error
 import plotly.express as px
-import io
 
+# ==================== CONFIGURAÇÃO DA PÁGINA ====================
 st.set_page_config(page_title="Simular com ML", layout="wide")
-st.title(" Simular Capacidade e Previsão com Machine Learning")
+st.title("Simular Capacidade e Previsão com Machine Learning")   # emoji removido
 
-# =============== UPLOAD DO ARQUIVO ===============
+# ==================== UPLOAD DO ARQUIVO ====================
 uploaded_file = st.file_uploader(
     "Faça upload do seu CSV com os dados de carga e equipe",
     type=["csv"],
-    help="O arquivo precisa ter pelo menos as colunas: Hora, Chegada_Ton, Saida_Priorizada, Equipe_Disponivel"
+    help="Colunas obrigatórias: Hora, Chegada_Ton, Saida_Priorizada, Equipe_Disponivel"
 )
 
 if uploaded_file is not None:
     try:
-        # Correção: ler o arquivo corretamente no Streamlit Cloud
         df = pd.read_csv(uploaded_file)
         st.success("Arquivo carregado com sucesso!")
         st.dataframe(df.head(10))
 
-        # =============== PRÉ-PROCESSAMENTO ===============
-        # Converter Hora para minutos do dia
-        df['Hora_dt'] = pd.to_datetime(df['Hora'], format='%H:%M', errors='coerce')
-        df['Minutos_do_dia'] = df['Hora_dt'].dt.hour * 60 + df['Hora_dt'].dt.minute
+        # ==================== PRÉ-PROCESSAMENTO ====================
+        df["Hora_dt"] = pd.to_datetime(df["Hora"], format="%H:%M", errors="coerce")
+        df["Minutos_do_dia"] = df["Hora_dt"].dt.hour * 60 + df["Hora_dt"].dt.minute
 
-        # Garantir que as colunas numéricas existam
-        for col in ['Chegada_Ton', 'Saida_Priorizada', 'Equipe_Disponivel']:
-            if col not in df.columns:
-                st.error(f"Coluna obrigatória faltando: {col}")
-                st.stop()
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        # Garante colunas numéricas
+        for col in ["Chegada_Ton", "Saida_Priorizada", "Equipe_Disponivel"]:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-        # Cálculo da capacidade por hora (30s descarregar + 38s carregar ≈ 34s médio)
-        ciclo_seg = 34
-        ops_por_pessoa_por_hora = 3600 / ciclo_seg
-        df['Capacidade_ton_hora'] = df['Equipe_Disponivel'] * ops_por_pessoa_por_hora
+        # Capacidade por hora (34s médio por operação)
+        df["Capacidade_ton_hora"] = df["Equipe_Disponivel"] * (3600 / 34)
 
-        # Acumulação de carga (simulação simples)
-        df['Acumulação'] = (df['Chegada_Ton'].cumsum() - df['Saida_Priorizada'].cumsum()).clip(lower=0)
+        # Acumulação de carga
+        df["Acumulacao"] = (df["Chegada_Ton"].cumsum() - df["Saida_Priorizada"].cumsum()).clip(lower=0)
 
-        # =============== MACHINE LEARNING ===============
-        X = df[['Minutos_do_dia', 'Chegada_Ton', 'Equipe_Disponivel']]
-        y = df['Acumulação']
+        # ==================== MACHINE LEARNING ====================
+        X = df[["Minutos_do_dia", "Chegada_Ton", "Equipe_Disponivel"]]
+        y = df["Acumulacao"]
 
-        if len(df) < 5:
-            st.warning("Poucos dados para treinar o modelo. Usando valores simulados.")
-        else:
+        if len(df) >= 5:
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
             model = LinearRegression()
             model.fit(X_train, y_train)
             y_pred = model.predict(X_test)
             mae = mean_absolute_error(y_test, y_pred)
+            st.write(f"**Erro Médio Absoluto (MAE):** {mae:.2f} toneladas")
+        else:
+            st.warning("Poucos dados para treinar. Usando apenas simulação.")
+            model = None
 
-            st.subheader(" Resultados do Modelo de Machine Learning")
-            st.write(f"Erro Médio Absoluto (MAE): **{mae:.2f} toneladas**")
+        # ==================== PREVISÃO INTERATIVA ====================
+        st.subheader("Faça sua própria previsão")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            hora_input = st.time_input("Horário", value=pd.to_datetime("14:00").time())
+        with col2:
+            chegada = st.number_input("Chegada (ton)", min_value=0.0, value=5.0)
+        with col3:
+            equipe = st.number_input("Equipe disponível", min_value=0, value=2, step=1)
 
-            # =============== PREVISÃO INTERATIVA ===============
-            st.subheader(" Faça sua própria previsão")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                hora_prev = st.time_input("Horário da previsão", value=pd.to_datetime("14:00").time())
-            with col2:
-                chegada_prev = st.number_input("Chegada de carga (ton)", min_value=0.0, value=5.0)
-            with col3:
-                equipe_prev = st.number_input("Equipe disponível", min_value=0, value=2, step=1)
+        minutos = hora_input.hour * 60 + hora_input.minute
 
-            minutos = hora_prev.hour * 60 + hora_prev.minute
-            previsao = model.predict([[minutos, chegada_prev, equipe_prev]])[0]
+        if model is not None:
+            previsao = model.predict([[minutos, chegada, equipe]])[0]
+            st.success(f"Previsão às {hora_input.strftime('%H:%M')}: **{previsao:.2f} ton**")
+        else:
+            st.info("Modelo ainda não treinado (poucos dados).")
 
-            st.success(f"Previsão de acumulação às {hora_prev.strftime('%H:%M')}: **{previsao:.2f} toneladas**")
+        # ==================== GRÁFICOS ====================
+        st.subheader("Gráficos")
+        fig1 = px.line(df, x="Hora", y="Acumulacao", title="Acumulação de Carga", markers=True)
+        st.plotly_chart(fig1, use_container_width=True)
 
-        # =============== GRÁFICOS INTERATIVOS ===============
-        st.subheader(" Visualizações")
-
-        fig1 = px.line(df, x='Hora', y='Acumulação', title='Acumulação de Carga ao Longo do Dia',
-                       markers=True, height=500)
-        fig1.update_layout(xaxis_title="Horário", yaxis_title="Acumulação (ton)")
-        st.write(fig1)
-
-        fig2 = px.bar(df, x='Hora', y=['Chegada_Ton', 'Saida_Priorizada', 'Capacidade_ton_hora'],
-                      title='Chegadas × Saídas × Capacidade por Hora',
-                      barmode='group', height=500)
-        st.write(fig2)
+        fig2 = px.bar(df, x="Hora", y=["Chegada_Ton", "Saida_Priorizada", "Capacidade_ton_hora"],
+                      title="Chegadas × Saídas × Capacidade", barmode="group")
+        st.plotly_chart(fig2, use_container_width=True)
 
     except Exception as e:
-        st.error(f"Erro ao processar o arquivo: {e}")
-        st.info("Verifique se o CSV está no formato correto e tente novamente.")
+        st.error(f"Erro ao processar: {e}")
 
 else:
-    st.info("Aguardando upload do arquivo CSV...")
-    st.markdown("""
-    ### Formato esperado do CSV (exemplo):
+    st.info("Aguardando upload do CSV...")
+    csv_exemplo = """Hora,Chegada_Ton,Saida_Priorizada,Equipe_Disponivel
+04:00,5,0,2
+05:00,15,0,2
+06:00,0,10,2
+07:00,0,0,2
+08:00,0,5,2
+09:00,0,0,2
+10:00,3,0,0
+11:00,0,3,1
+12:00,0,0,1
+13:00,0,0,1
+14:00,2,0,1
+15:00,10,5,2
+16:00,0,0,2
+17:00,0,8,2
+18:00,4,0,0"""
+    st.download_button("Baixar CSV de exemplo", csv_exemplo, "dados_logistica_exemplo.csv", "text/csv")
