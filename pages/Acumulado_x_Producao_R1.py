@@ -1,3 +1,4 @@
+# pages/01-Acumulado_x_Producao.py
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -38,18 +39,210 @@ for k in keys:
 padrao_chegadas = """00:00 1,7
 00:00 6,3
 00:20 14,9
-... (dados omitidos por brevidade - mantidos exatamente como no original) ...
+00:30 2,6
+01:15 3,9
+01:30 7,3
+01:30 14,8
+01:50 1,8
+02:10 2,8
+02:25 10,2
+02:30 8,9
+03:00 9,6
+03:00 32,7
+03:00 7,9
+03:15 6,5
+03:30 15,7
+03:30 8,9
+03:30 4,4
+03:45 3,8
+04:00 16,4
+04:00 8,2
+04:05 0,1
+04:15 4,2
+04:20 8,7
+04:20 5,7
+04:30 8,2
+04:30 6,9
+04:30 9,7
+04:40 0,0
+04:45 9,2
+04:45 6,1
+04:45 15,3
+04:45 11,4
+04:50 10,4
+05:00 4,2
+05:00 5,0
+05:10 13,1
+05:15 7,5
+05:20 0,0
+05:25 6,6
+05:30 15,8
+05:40 3,3
+06:00 8,0
+06:00 4,3
+06:10 0,0
+06:10 0,0
+07:00 1,7
+08:00 10,2
+10:20 8,0
+10:30 0,0
+11:00 0,0
+11:45 0,0
+11:55 3,3
+12:05 9,0
+14:10 0,0
+14:45 0,0
+15:30 0,0
+16:15 9,4
+16:25 0,0
+16:30 10,0
+20:00 5,2
+20:00 5,6
+20:00 2,4
+20:15 5,0
+20:15 12,4
+20:15 4,4
+20:30 3,2
+20:45 1,1
+20:45 4,9
+21:00 3,6
+21:00 6,1
+21:10 6,6
+21:15 6,6
+21:25 7,5
+21:30 4,6
+21:30 3,9
+21:30 0,8
+21:30 5,4
+21:40 9,2
+21:40 9,1
+21:40 2,2
+21:40 6,9
+21:45 0,0
+22:00 1,1
+22:00 8,0
+22:30 13,5
+22:30 3,8
+22:30 3,7
+22:45 1,8
+22:45 7,3
+23:00 2,6
+23:15 1,4
 23:20 8,2"""
 
 padrao_saidas = """00:00 0,1
-... (dados omitidos por brevidade - mantidos exatamente como no original) ...
+00:30 1,4
+00:30 1,3
+00:45 6,1
+01:00 2,2
+01:00 2,2
+01:20 2,0
+01:30 3,8
+01:45 5,2
+02:00 0,7
+02:00 2,1
+02:00 0,6
+02:30 12,8
+02:40 3,2
+03:15 4,4
+03:20 17,1
+03:30 0,5
+03:30 0,7
+03:45 3,4
+04:00 3,2
+04:00 5,9
+04:00 12,4
+04:00 7,5
+04:10 6,1
+04:15 7,0
+04:40 0,4
+04:40 0,8
+05:00 13,0
+05:00 6,5
+05:00 5,1
+05:00 8,0
+05:00 12,4
+05:00 7,5
+05:00 0,0
+05:00 7,2
+05:00 15,2
+05:00 15,7
+05:40 8,0
+06:00 14,4
+06:00 10,4
+06:00 16,3
+06:00 14,2
+06:00 13,8
+06:10 5,8
+06:30 8,2
+06:30 3,9
+06:30 5,4
+06:30 10,3
+06:30 7,6
+07:00 3,7
+07:00 15,9
+07:00 4,2
+07:00 3,3
+07:00 0,8
+07:00 0,0
+07:00 9,7
+07:00 3,6
+07:00 4,9
+07:00 4,6
+07:00 13,1
+07:00 15,6
+07:00 11,4
+07:00 9,0
+07:00 5,7
+07:10 5,7
+07:10 7,7
+07:15 14,9
+07:45 4,7
+08:45 3,1
+11:00 5,4
+17:15 3,1
+21:30 14,6
+22:00 6,4
+22:00 2,7
+22:20 17,2
+22:30 1,8
+22:30 3,1
+22:30 1,1
+22:30 1,4
+22:30 1,5
+22:30 6,4
+22:40 6,2
+23:00 1,7
+23:00 0,1
+23:15 4,9
+23:30 2,3
+23:30 1,1
+23:30 2,2
+23:30 7,9
+23:30 1,8
+23:30 0,0
+23:30 0,3
 23:30 0,6"""
 
 padrao_conf = """01:00 04:00 05:05 10:23 1
-... (dados omitidos por brevidade - mantidos exatamente como no original) ..."""
+16:00 20:00 21:05 01:24 2
+18:30 22:30 23:30 03:38 4
+19:00 23:00 00:05 04:09 8
+21:00 01:00 02:05 06:08 5
+22:00 02:00 03:05 07:03 9
+23:30 03:30 04:35 08:49 19
+23:50 02:40 03:45 09:11 4"""
 
 padrao_aux = """16:00 20:00 21:05 01:24 5
-... (dados omitidos por brevidade - mantidos exatamente como no original) ..."""
+18:00 22:00 23:00 03:12 1
+19:00 22:52 12
+19:00 23:00 00:05 04:09 13
+19:15 23:06 1
+21:00 01:00 02:05 06:08 29
+21:30 01:30 02:30 06:33 1
+22:00 02:00 03:05 07:03 20
+23:30 03:30 04:35 08:49 25
+23:50 02:40 03:45 09:11 1"""
 
 # =============================================
 # FUNÇÕES
@@ -88,13 +281,14 @@ def extrair_jornadas(texto):
     return j
 
 # =============================================
-# UPLOAD DE ARQUIVOS
+# UPLOAD DE ARQUIVOS (SE HOUVER)
 # =============================================
 chegadas_bytes = st.file_uploader("Chegadas (TXT ou XLSX)", type=["txt", "xlsx"], key="chegadas")
 saidas_bytes = st.file_uploader("Saídas (TXT ou XLSX)", type=["txt", "xlsx"], key="saidas")
 conf_bytes = st.file_uploader("Jornada Conferentes (TXT ou XLSX)", type=["txt", "xlsx"], key="conf")
 aux_bytes = st.file_uploader("Jornada Auxiliares (TXT ou XLSX)", type=["txt", "xlsx"], key="aux")
 
+# Salva no session_state
 if chegadas_bytes: st.session_state.chegadas_bytes = chegadas_bytes.getvalue()
 if saidas_bytes: st.session_state.saidas_bytes = saidas_bytes.getvalue()
 if conf_bytes: st.session_state.conf_bytes = conf_bytes.getvalue()
@@ -198,20 +392,17 @@ df["Acumulado_ton"] = acumulado_list
 # GRÁFICO
 # =============================================
 fig = go.Figure()
-
 fig.add_trace(go.Bar(x=df["Horario"], y=df["Chegada_ton"], name="Chegada", marker_color="#2ca02c"))
 fig.add_trace(go.Bar(x=df["Horario"], y=-df["Saida_ton"], name="Saída", marker_color="#d62728"))
-
 fig.add_trace(go.Scatter(x=df["Horario"], y=df["Acumulado_ton"], mode="lines", name="Acumulado",
                          fill="tozeroy", fillcolor="rgba(148,103,189,0.4)", line=dict(color="#9467bd", width=3)))
-
-# <<< LINHA DE PROCESSAMENTO REMOVIDA >>>
-
+#fig.add_trace(go.Scatter(x=df["Horario"], y=df["Processamento_Total_ton_h"], mode="lines", name="Processamento Total",
+                         #line=dict(color="#ff7f0e", width=3, dash="dash"),
+                         #hovertemplate="<b>%{x}</b><br>Processamento: %{y} ton/h<extra></extra>"))
 fig.add_trace(go.Scatter(x=df["Horario"], y=df["Conferentes"] * escala_pessoas, mode="lines+markers",
                          name="Conferentes", line=dict(color="#1f77b4", width=2), marker=dict(size=5),
                          customdata=df[["Conferentes"]].values,
                          hovertemplate="<b>%{x}</b><br>Conferentes: %{customdata[0]}<extra></extra>"))
-
 fig.add_trace(go.Scatter(x=df["Horario"], y=df["Auxiliares"] * escala_pessoas, mode="lines+markers",
                          name="Auxiliares", line=dict(color="#006400", width=2), marker=dict(size=5),
                          customdata=df[["Auxiliares"]].values,
@@ -228,13 +419,12 @@ if rotulos:
                                text=f"-{r['Saida_ton']:.1f}", font=dict(color="white", size=9),
                                bgcolor="#d62728", showarrow=False, yshift=-8)
 
-# Ajuste do range Y sem a linha de processamento
-max_y = max(df[["Chegada_ton", "Acumulado_ton"]].max().max(),
+max_y = max(df[["Chegada_ton", "Acumulado_ton", "Processamento_Total_ton_h"]].max().max(),
             df[["Conferentes", "Auxiliares"]].max().max() * escala_pessoas) * 1.2
 min_y = -df["Saida_ton"].max() * 1.2
 
 fig.update_layout(
-    title="Acumulado x Produção - CD",
+    title="Processamento Total - CD",
     xaxis_title="Horário",
     yaxis=dict(title="Toneladas", range=[min_y, max_y]),
     barmode="relative",
@@ -274,6 +464,5 @@ with st.expander("Tabela Completa"):
         "Auxiliares": "{:d}",
         "Total_Pessoas": "{:d}"
     }), use_container_width=True)
-    
     csv = df_disp.to_csv(index=False).encode()
     st.download_button("Baixar CSV", csv, "logistica_com_processamento.csv", "text/csv")
