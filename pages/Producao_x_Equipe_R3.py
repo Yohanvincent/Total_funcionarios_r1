@@ -5,30 +5,34 @@ import plotly.graph_objects as go
 import io
 
 st.set_page_config(layout="wide")
-st.title("🚛 Produção vs Equipe + Horários Críticos (Pontos no Gráfico)")
+st.title("🚛 Produção vs Equipe Disponível + Janelas Críticas")
 
-rotulos = st.checkbox("Mostrar rótulos de valores", value=True)
-mostrar_pontos = st.checkbox("Mostrar pontos de Saída Entrega e Retorno Coleta", value=True)
+rotulos = st.checkbox("Rótulos", value=True)
+mostrar_simbolos = st.checkbox("Mostrar símbolos Saída Entrega / Retorno Coleta", value=True)
 
 # ==============================================================
 # 1 – ENTRADA DE DADOS
 # ==============================================================
-st.markdown("### ✏️ Cole seus dados (ou use os padrões)")
+st.markdown("### ✏️ Cole novos dados (opcional – substitui os fixos)")
 
-col1, col2, col3 = st.columns([2, 2, 1.8])
+col_a, col_b, col_c = st.columns([2, 2, 1.8])
 
-with col1:
-    nova_chegada = st.text_area("Chegadas (horário tonelada)", height=220)
-    nova_confer = st.text_area("Conferentes (entrada saída_int retorno_int saída_final qtd)", height=220)
+with col_a:
+    nova_chegada = st.text_area("Chegadas (horário tonelada – uma por linha)", height=200,
+                                placeholder="04:30 15.8\n05:00 12.4\n...")
+    nova_confer = st.text_area("Conferentes (entrada saída_int retorno_int saída_final qtd)", height=200,
+                               placeholder="04:30 09:30 10:30 13:26 2\n19:00 23:00 00:05 04:09 8")
 
-with col2:
-    nova_saida = st.text_area("Saídas carregadas (horário tonelada)", height=220)
-    nova_aux = st.text_area("Auxiliares (entrada saída_final qtd)", height=220)
+with col_b:
+    nova_saida = st.text_area("Saídas (horário tonelada – uma por linha)", height=200,
+                              placeholder="21:00 8.5\n21:30 12.3\n...")
+    nova_aux = st.text_area("Auxiliares (entrada saída qtd)", height=200,
+                            placeholder="19:00 04:09 13\n03:30 13:18 19")
 
-with col3:
+with col_c:
     st.markdown("#### Horários Críticos (um por linha)")
-    janelas = st.text_area(
-        "Formato: horário descrição",
+    janelas_input = st.text_area(
+        "Ex: 18:00 Retorno de Coleta\n07:40 Saída Para Entrega",
         height=380,
         value="""18:00 Retorno de Coleta
 18:15 Retorno de Coleta
@@ -47,7 +51,7 @@ with col3:
     )
 
 # ==============================================================
-#  # 2 – DADOS PADRÃO
+# 2 – DADOS FIXOS
 # ==============================================================
 chegada_fixa = """03:30 9,6
 04:20 5,9
@@ -90,28 +94,28 @@ aux_fixa = """03:30 07:18 3
 18:30 22:26 18"""
 
 # ==============================================================
-# 3 – APLICA DADOS
+# 3 – SUBSTITUIÇÃO E JANELAS CRÍTICAS
 # ==============================================================
 chegada_txt = nova_chegada.strip() if nova_chegada.strip() else chegada_fixa
 saida_txt   = nova_saida.strip()   if nova_saida.strip()   else saida_fixa
 confer_txt  = nova_confer.strip()  if nova_confer.strip()  else confer_fixa
 aux_txt     = nova_aux.strip()     if nova_aux.strip()     else aux_fixa
 
-# Processa horários críticos
-saida_entrega = []
-retorno_coleta = []
-for linha in janelas.strip().split("\n"):
+# Extrai horários críticos
+saida_entrega_hrs = []
+retorno_coleta_hrs = []
+for linha in janelas_input.strip().split("\n"):
     if not linha.strip(): continue
     partes = linha.strip().split(maxsplit=1)
     hora = partes[0]
     desc = partes[1].lower() if len(partes) > 1 else ""
     if "saída" in desc or "entrega" in desc:
-        saida_entrega.append(hora)
-    elif "retorno" in desc or "coleta" in desc:
-        retorno_coleta.append(hora)
+        saida_entrega_hrs.append(hora)
+    if "retorno" in desc or "coleta" in desc:
+        retorno_coleta_hrs.append(hora)
 
 # ==============================================================
-# 4 – FUNÇÕES (100% funcionais)
+# 4 – PROCESSAMENTO ORIGINAL (mantido 100%)
 # ==============================================================
 def extrair_producao(texto):
     cheg = {}
@@ -164,8 +168,11 @@ def get_horarios_from_texts(*texts):
 jornadas_conf = jornadas(confer_txt)
 jornadas_aux = jornadas(aux_txt)
 
-todas_horas = set(cheg) | set(said) | set(saida_entrega) | set(retorno_coleta)
-todas_horas.update(get_horarios_from_texts(confer_txt, aux_txt))
+todas_horas = set(cheg.keys()) | set(said.keys())
+todas_horas.update(saida_entrega_hrs)
+todas_horas.update(retorno_coleta_hrs)
+horas_equipe = get_horarios_from_texts(confer_txt, aux_txt)
+todas_horas.update(horas_equipe)
 horarios = sorted(todas_horas, key=min_hora)
 
 def calcular_equipe(jornadas_list, horarios):
@@ -198,87 +205,114 @@ df = pd.DataFrame({
     "Horario": horarios,
     "Chegada_Ton": cheg_val,
     "Saida_Ton": said_val,
-    "Equipe": eq_total
+    "Equipe": eq_total,
+    "Equipe_Conf": eq_conf,
+    "Equipe_Aux": eq_aux
 })
 
-# Escala da equipe
-max_ton = max(max(cheg_val or [0]), max(said_val or [0])) + 10
-scale = max_ton / (max(eq_total or [0]) + 5)
+# Escala equipe (igual à versão original)
+max_cheg = max(cheg_val) if cheg_val else 0
+max_said = max(said_val) if said_val else 0
+max_eq = max(df["Equipe"]) if len(df) else 0
+margem = 5
+y_max = max(max_cheg, max_said) + margem
+eq_range = max_eq + margem
+scale = y_max / eq_range if eq_range > 0 else 1
 df["Equipe_Escalada"] = df["Equipe"] * scale
 
 # ==============================================================
-# GRÁFICO COM PONTOS GRANDES NOS HORÁRIOS CRÍTICOS
+# GRÁFICO – EXATAMENTE COMO VOCÊ ENVIOU ORIGINALMENTE + SÍMBOLOS
 # ==============================================================
 fig = go.Figure()
 
-fig.add_trace(go.Bar(x=df["Horario"], y=df["Chegada_Ton"], name="Chegada (ton)", marker_color="#90EE90"))
-fig.add_trace(go.Bar(x=df["Horario"], y=df["Saida_Ton"], name="Saída Carregada (ton)", marker_color="#E74C3C"))
-
+fig.add_trace(go.Bar(
+    x=df["Horario"], y=df["Chegada_Ton"],
+    name="Chegada (ton)", marker_color="#90EE90", opacity=0.8
+))
+fig.add_trace(go.Bar(
+    x=df["Horario"], y=df["Saida_Ton"],
+    name="Saída (ton)", marker_color="#E74C3C", opacity=0.8
+))
 fig.add_trace(go.Scatter(
     x=df["Horario"], y=df["Equipe_Escalada"],
-    mode="lines+markers+text",
-    name="Equipe Disponível",
-    line=dict(color="#9B59B6", width=5, dash="dot"),
-    text=df["Equipe"],
-    textposition="top center",
-    hovertemplate="Equipe: %{text} pessoas"
+    mode="lines+markers", name="Equipe",
+    line=dict(color="#9B59B6", width=4, dash="dot"),
+    marker=dict(size=8),
+    customdata=df["Equipe"],
+    hovertemplate="Equipe: %{customdata}<extra></extra>"
 ))
 
-# PONTOS GRANDES NOS HORÁRIOS CRÍTICOS
-if mostrar_pontos:
-    # Saída para Entrega → ponto azul grande
-    df_entrega = df[df["Horario"].isin(saida_entrega)]
-    fig.add_trace(go.Scatter(
-        x=df_entrega["Horario"], y=[max_ton * 1.05] * len(df_entrega),
-        mode="markers+text",
-        marker=dict(color="#2980B9", size=16, symbol="triangle-down"),
-        text=["Saída Entrega"] * len(df_entrega),
-        textposition="top center",
-        name="Saída Entrega",
-        hoverinfo="text"
-    ))
+# === SÍMBOLOS GRANDES (sem texto em cima) ===
+if mostrar_simbolos:
+    # Saída para Entrega → triângulo azul para baixo
+    if saida_entrega_hrs:
+        fig.add_trace(go.Scatter(
+            x=saida_entrega_hrs,
+            y=[y_max * 1.08] * len(saida_entrega_hrs),
+            mode="markers",
+            marker=dict(color="#2980B9", size=18, symbol="triangle-down"),
+            name="Saída para Entrega",
+            hoverinfo="none"
+        ))
 
-    # Retorno de Coleta → ponto laranja grande
-    df_coleta = df[df["Horario"].isin(retorno_coleta)]
-    fig.add_trace(go.Scatter(
-        x=df_coleta["Horario"], y=[max_ton * 1.05] * len(df_coleta),
-        mode="markers+text",
-        marker=dict(color="#E67E22", size=16, symbol="triangle-up"),
-        text=["Retorno Coleta"] * len(df_coleta),
-        textposition="bottom center",
-        name="Retorno Coleta",
-        hoverinfo="text"
-    ))
+    # Retorno de Coleta → triângulo laranja para cima
+    if retorno_coleta_hrs:
+        fig.add_trace(go.Scatter(
+            x=retorno_coleta_hrs,
+            y=[y_max * 1.08] * len(retorno_coleta_hrs),
+            mode="markers",
+            marker=dict(color="#E67E22", size=18, symbol="triangle-up"),
+            name="Retorno de Coleta",
+            hoverinfo="none"
+        ))
 
-# Rótulos normais
+# === RÓTULOS EXATAMENTE COMO NA VERSÃO ORIGINAL ===
 if rotulos:
     for _, r in df.iterrows():
         if r["Chegada_Ton"] > 0:
-            fig.add_annotation(x=r["Horario"], y=r["Chegada_Ton"], text=str(r["Chegada_Ton"]), yshift=10, showarrow=False, font=dict(color="#27AE60"))
+            fig.add_annotation(x=r["Horario"], y=r["Chegada_Ton"], text=f"{r['Chegada_Ton']}",
+                               font=dict(color="#2ECC71", size=9), bgcolor="white",
+                               bordercolor="#90EE90", borderwidth=1, showarrow=False, yshift=10)
         if r["Saida_Ton"] > 0:
-            fig.add_annotation(x=r["Horario"], y=r["Saida_Ton"], text=str(r["Saida_Ton"]), yshift=10, showarrow=False, font=dict(color="#C0392B"))
+            fig.add_annotation(x=r["Horario"], y=r["Saida_Ton"], text=f"{r['Saida_Ton']}",
+                               font=dict(color="#E74C3C", size=9), bgcolor="white",
+                               bordercolor="#E74C3C", borderwidth=1, showarrow=False, yshift=10)
+        if r["Equipe"] > 0:
+            fig.add_annotation(x=r["Horario"], y=r["Equipe_Escalada"], text=f"{int(r['Equipe'])}",
+                               font=dict(color="#9B59B6", size=9), bgcolor="white",
+                               bordercolor="#9B59B6", borderwidth=1, showarrow=False, yshift=0, align="center")
 
 fig.update_layout(
-    title="Capacidade Operacional – Pontos destacam Saídas e Retornos Críticos",
     xaxis_title="Horário",
-    yaxis=dict(title="Toneladas | Equipe (escalada)", range=[0, max_ton * 1.15]),
-    height=750,
-    barmode="stack",
+    yaxis=dict(title="Toneladas | Equipe (escalada)", side="left", range=[0, y_max * 1.15], zeroline=False),
+    height=700,
     hovermode="x unified",
-    legend=dict(orientation="h", y=1.1)
+    legend=dict(x=0, y=1.1, orientation="h"),
+    barmode="stack",
+    margin=dict(l=60, r=60, t=80, b=60)
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
 # ==============================================================
-# DOWNLOAD
+# DOWNLOAD E DADOS USADOS
 # ==============================================================
-buffer = io.BytesIO()
-with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-    df.to_excel(writer, sheet_name="Produção", index=False)
-    pd.DataFrame({"Saída para Entrega": saida_entrega, "Retorno de Coleta": retorno_coleta}).to_excel(writer, sheet_name="Horários Críticos", index=False)
-buffer.seek(0)
+out = io.BytesIO()
+df_export = df[["Horario", "Chegada_Ton", "Saida_Ton", "Equipe", "Equipe_Conf", "Equipe_Aux"]].copy()
+with pd.ExcelWriter(out, engine="openpyxl") as w:
+    df_export.to_excel(w, index=False)
+out.seek(0)
 
-st.download_button("📊 Baixar Relatório Completo", buffer, "capacidade_com_pontos.xlsx")
+st.download_button("Baixar Excel", out, "producao_vs_equipe.xlsx",
+                   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-st.success("App rodando 100% – Pontos grandes nos horários críticos adicionados com sucesso! (21/11/2025)")
+st.markdown("### Dados atualmente em uso")
+c1, c2 = st.columns(2)
+with c1:
+    st.markdown("**Chegadas**"); st.code(chegada_txt, language="text")
+    st.markdown("**Conferentes**"); st.code(confer_txt, language="text")
+with c2:
+    st.markdown("**Saídas**"); st.code(saida_txt, language="text")
+    st.markdown("**Auxiliares**"); st.code(aux_txt, language="text")
+
+st.success("Versão final – símbolos limpos, rótulos originais restaurados! 21/11/2025 ✅")
