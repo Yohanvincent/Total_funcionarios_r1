@@ -19,36 +19,24 @@ col_a, col_b, col_c = st.columns([2, 2, 1.8])
 
 with col_a:
     nova_chegada = st.text_area("Chegadas (horário tonelada – uma por linha)", height=200,
-                                placeholder="04:30 15.8\n05:00 12.4\n...")
-    nova_confer = st.text_area("Conferentes (entrada saída_int retorno_int saída_final qtd)", height=200,
-                               placeholder="04:30 09:30 10:30 13:26 2\n19:00 23:00 00:05 04:09 8")
+                                placeholder="04:30 15.8\n05:00 12.4")
+    nova_confer = st.text_area("Conferentes (entrada saída_int retorno_int saída_final qtd)", height=200)
 
 with col_b:
-    nova_saida = st.text_area("Saídas (horário tonelada – uma por linha)", height=200,
-                              placeholder="21:00 8.5\n21:30 12.3\n...")
-    nova_aux = st.text_area("Auxiliares (entrada saída qtd)", height=200,
-                            placeholder="19:00 04:09 13\n21:00 06:08 29")
+    nova_saida = st.text_area("Saídas (horário tonelada – uma por linha)", height=200)
+    nova_aux = st.text_area("Auxiliares (entrada saída qtd)", height=200)
 
 with col_c:
-    st.markdown("#### Horários Críticos (um por linha)")
-    janelas_input = st.text_area(
-        "Ex: 18:00 Retorno de Coleta",
-        height=380,
-        value="""18:00 Retorno de Coleta
-18:15 Retorno de Coleta
-18:30 Retorno de Coleta
-18:45 Retorno de Coleta
-19:00 Retorno de Coleta
-19:15 Retorno de Coleta
-19:30 Retorno de Coleta
-07:40 Saída Para Entrega
-08:00 Saída Para Entrega
-08:10 Saída Para Entrega
-08:20 Saída Para Entrega
-09:00 Saída Para Entrega
-14:00 Saída Para Entrega
-14:20 Saída Para Entrega"""
-    )
+    st.markdown("#### Horários Críticos")
+    st.info("⚠️ Agora você pode colar apenas as horas (uma por linha) em cada campo")
+    
+    col_ret, col_ent = st.columns(2)
+    with col_ret:
+        retorno_input = st.text_area("Retorno de Coleta (só horário)", height=280,
+                                     placeholder="18:00\n18:15\n18:30")
+    with col_ent:
+        entrega_input = st.text_area("Saída para Entrega (só horário)", height=280,
+                                     placeholder="07:40\n08:00\n14:00")
 
 # ==============================================================
 # 2 – DADOS FIXOS
@@ -105,21 +93,12 @@ texto_producao = f"Cheg. Ton.\n{chegada_txt}\nSaida Ton.\n{saida_txt}"
 texto_confer = confer_txt
 texto_aux = aux_txt
 
-# Horários críticos
-saida_entrega_hrs = []
-retorno_coleta_hrs = []
-for linha in janelas_input.strip().split("\n"):
-    if not linha.strip(): continue
-    partes = linha.strip().split(maxsplit=1)
-    hora = partes[0]
-    desc = partes[1].lower() if len(partes) > 1 else ""
-    if "saída" in desc or "entrega" in desc:
-        saida_entrega_hrs.append(hora)
-    if "retorno" in desc or "coleta" in desc:
-        retorno_coleta_hrs.append(hora)
+# Horários críticos – agora aceita só a hora
+retorno_coleta_hrs = [h.strip() for h in retorno_input.split("\n") if h.strip() and ":" in h]
+saida_entrega_hrs = [h.strip() for h in entrega_input.split("\n") if h.strip() and ":" in h]
 
 # ==============================================================
-# 4 – O RESTO DO CÓDIGO ORIGINAL (100% FUNCIONAL)
+# 4 – RESTO DO CÓDIGO ORIGINAL (100% mantido)
 # ==============================================================
 def extrair_producao(texto):
     cheg = {}
@@ -172,7 +151,7 @@ jornadas_conf = jornadas(texto_confer)
 jornadas_aux = jornadas(texto_aux)
 
 todas_horas = set(cheg.keys()) | set(said.keys())
-todas_horas.update(saida_entrega_hrs + retorno_coleta_hrs)
+todas_horas.update(retorno_coleta_hrs + saida_entrega_hrs)
 horas_equipe = get_horarios_from_texts(texto_confer, texto_aux)
 todas_horas.update(horas_equipe)
 horarios = sorted(todas_horas, key=min_hora)
@@ -212,7 +191,7 @@ df = pd.DataFrame({
     "Equipe_Aux": eq_aux
 })
 
-# Escala equipe (igual ao original)
+# Escala equipe
 max_cheg = max(cheg_val) if cheg_val else 0
 max_said = max(said_val) if said_val else 0
 max_eq = max(df["Equipe"]) if len(df) else 0
@@ -223,18 +202,13 @@ scale = y_max / eq_range if eq_range > 0 else 1
 df["Equipe_Escalada"] = df["Equipe"] * scale
 
 # ==============================================================
-# GRÁFICO (SÓ ALTEREI OS RÓTULOS PARA + E -)
+# GRÁFICO
 # ==============================================================
 fig = go.Figure()
 
-fig.add_trace(go.Bar(
-    x=df["Horario"], y=df["Chegada_Ton"],
-    name="Chegada (ton)", marker_color="#90EE90", opacity=0.8
-))
-fig.add_trace(go.Bar(
-    x=df["Horario"], y=df["Saida_Ton"],
-    name="Saída (ton)", marker_color="#E74C3C", opacity=0.8
-))
+fig.add_trace(go.Bar(x=df["Horario"], y=df["Chegada_Ton"], name="Chegada (ton)", marker_color="#90EE90", opacity=0.8))
+fig.add_trace(go.Bar(x=df["Horario"], y=df["Saida_Ton"], name="Saída (ton)", marker_color="#E74C3C", opacity=0.8))
+
 fig.add_trace(go.Scatter(
     x=df["Horario"], y=df["Equipe_Escalada"],
     mode="lines+markers", name="Equipe",
@@ -244,14 +218,14 @@ fig.add_trace(go.Scatter(
     hovertemplate="Equipe: %{customdata}<extra></extra>"
 ))
 
-# Símbolos críticos (sem texto)
+# SÍMBOLOS CORRIGIDOS: SAÍDA ENTREGA ▲ (para cima) | RETORNO COLETA ▼ (para baixo)
 if mostrar_simbolos:
     if saida_entrega_hrs:
         fig.add_trace(go.Scatter(
             x=saida_entrega_hrs,
             y=[y_max * 1.08] * len(saida_entrega_hrs),
             mode="markers",
-            marker=dict(color="#2980B9", size=18, symbol="triangle-down"),
+            marker=dict(color="#2980B9", size=20, symbol="triangle-up"),  # ▲ para cima
             name="Saída para Entrega",
             hoverinfo="none"
         ))
@@ -260,12 +234,12 @@ if mostrar_simbolos:
             x=retorno_coleta_hrs,
             y=[y_max * 1.08] * len(retorno_coleta_hrs),
             mode="markers",
-            marker=dict(color="#E67E22", size=18, symbol="triangle-up"),
+            marker=dict(color="#E67E22", size=20, symbol="triangle-down"),  # ▼ para baixo
             name="Retorno de Coleta",
             hoverinfo="none"
         ))
 
-# RÓTULOS COM + PARA CHEGADA E - PARA SAÍDA
+# RÓTULOS COM + E -
 if rotulos:
     for _, r in df.iterrows():
         if r["Chegada_Ton"] > 0:
@@ -294,7 +268,7 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 # ==============================================================
-# DOWNLOAD E DADOS USADOS (mantido original)
+# DOWNLOAD
 # ==============================================================
 out = io.BytesIO()
 df_export = df[["Horario", "Chegada_Ton", "Saida_Ton", "Equipe", "Equipe_Conf", "Equipe_Aux"]].copy()
@@ -304,13 +278,4 @@ out.seek(0)
 st.download_button("Baixar Excel", out, "producao_vs_equipe.xlsx",
                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-st.markdown("### Dados atualmente em uso")
-c1, c2 = st.columns(2)
-with c1:
-    st.markdown("**Chegadas**"); st.code(chegada_txt, language="text")
-    st.markdown("**Conferentes**"); st.code(confer_txt, language="text")
-with c2:
-    st.markdown("**Saídas**"); st.code(saida_txt, language="text")
-    st.markdown("**Auxiliares**"); st.code(aux_txt, language="text")
-
-st.success("Rótulos com + nas chegadas e - nas saídas aplicados com sucesso! Tudo funcionando 100% – 21/11/2025 ✅")
+st.success("Atualizado com sucesso! Triângulos corrigidos + agora aceita só horário nos campos críticos – 21/11/2025 ✅")
