@@ -26,10 +26,10 @@ with col1:
 
 with col2:
     nova_saida = st.text_area("Saídas Carregadas (horário tonelada)", height=250,
-                              placeholder="21:00 8.5\n21:30 12.3")
+                              placeholder=("21:00 8.5\n21:30 12.3")
     ")
     nova_aux = st.text_area("Auxiliares (entrada saída_final qtd)", height=250,
-                            placeholder="19:00 04:09 13")
+                            placeholder=("19:00 04:09 13")
 
 with col3:
     st.markdown("#### Janelas Críticas")
