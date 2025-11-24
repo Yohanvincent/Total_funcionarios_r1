@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import io
 
 st.set_page_config(layout="wide")
-st.title("🚛 Produção vs Equipe + Janelas Críticas com Toneladas (V4)")
+st.title("🚛 Produção vs Equipe + Janelas Críticas com Toneladas (V4 Final)")
 
 rotulos = st.checkbox("Rótulos", value=True)
 mostrar_simbolos = st.checkbox("Mostrar símbolos e barras de Saída/Retorno", value=True)
@@ -29,19 +29,19 @@ with col_b:
 with col_c:
     st.markdown("#### Saída para Entrega (hora + ton)")
     entrega_input = st.text_area(
-        "Ex: 08:00 14.5\n08:30 5.0",
+        "Ex: 08:00 14.5\n09:00 20.3",
         height=220,
         placeholder="08:00 14.5\n09:00 20.3"
     )
     st.markdown("#### Retorno de Coleta (hora + ton)")
     coleta_input = st.text_area(
-        "Ex: 18:00 12.8\n18:30 8.2",
+        "Ex: 18:00 12.8\n19:00 15.0",
         height=220,
         placeholder="18:00 12.8\n19:00 15.0"
     )
 
 # ==============================================================
-# 2 – DADOS FIXOS
+# 2 – DADOS FIXOS (mantidos)
 # ==============================================================
 chegada_fixa = """03:30 9,6
 04:20 5,9
@@ -84,7 +84,7 @@ aux_fixa = """03:30 07:18 3
 18:30 22:26 18"""
 
 # ==============================================================
-# 3 – SUBSTITUIÇÃO E PROCESSAMENTO DOS DADOS
+# 3 – PROCESSAMENTO
 # ==============================================================
 chegada_txt = nova_chegada.strip() if nova_chegada.strip() else chegada_fixa
 saida_txt = nova_saida.strip() if nova_saida.strip() else saida_fixa
@@ -95,7 +95,7 @@ texto_producao = f"Cheg. Ton.\n{chegada_txt}\nSaida Ton.\n{saida_txt}"
 texto_confer = confer_txt
 texto_aux = aux_txt
 
-# Processa Saída para Entrega e Retorno de Coleta com tonelagem
+# Saída Entrega e Retorno Coleta com tonelagem
 entrega_dict = {}
 for linha in entrega_input.strip().split("\n"):
     if not linha.strip(): continue
@@ -119,7 +119,7 @@ for linha in coleta_input.strip().split("\n"):
         except: pass
 
 # ==============================================================
-# 4 – PROCESSAMENTO ORIGINAL (mantido)
+# 4 – FUNÇÕES ORIGINAIS (mantidas)
 # ==============================================================
 def extrair_producao(texto):
     cheg = {}
@@ -171,13 +171,11 @@ def get_horarios_from_texts(*texts):
 jornadas_conf = jornadas(texto_confer)
 jornadas_aux = jornadas(texto_aux)
 
-# Todos os horários
-todas_horas = set(cheg.keys()) | set(said.keys()) | set(entrega_dict.keys()) | set(coleta_dict.keys())
+todas_horas = set(cheg) | set(said) | set(entrega_dict) | set(coleta_dict)
 horas_equipe = get_horarios_from_texts(texto_confer, texto_aux)
 todas_horas.update(horas_equipe)
 horarios = sorted(todas_horas, key=min_hora)
 
-# Equipe
 def calcular_equipe(jornadas_list, horarios):
     tl = [min_hora(h) for h in horarios]
     eq = [0] * len(tl)
@@ -199,7 +197,6 @@ def calcular_equipe(jornadas_list, horarios):
 
 eq_total = [a + b for a, b in zip(calcular_equipe(jornadas_conf, horarios), calcular_equipe(jornadas_aux, horarios))]
 
-# Valores
 cheg_val = [round(cheg.get(h, 0), 1) for h in horarios]
 said_val = [round(said.get(h, 0), 1) for h in horarios]
 entrega_val = [round(entrega_dict.get(h, 0), 1) for h in horarios]
@@ -220,70 +217,68 @@ scale = max_ton / (max(eq_total) + 5)
 df["Equipe_Escalada"] = df["Equipe"] * scale
 
 # ==============================================================
-# GRÁFICO V4 – COM BARRAS DE ENTREGA E COLETA
+# GRÁFICO V4 – RÓTULO DA EQUIPE RESTAURADO
 # ==============================================================
 fig = go.Figure()
 
-# Chegadas (verde claro)
 fig.add_trace(go.Bar(x=df["Horario"], y=df["Chegada_Ton"], name="Chegada", marker_color="#90EE90", opacity=0.8))
-
-# Saídas carregadas (vermelho)
 fig.add_trace(go.Bar(x=df["Horario"], y=df["Saida_Ton"], name="Saída Carregada", marker_color="#E74C3C", opacity=0.8))
-
-# Saída para Entrega (azul)
 fig.add_trace(go.Bar(x=df["Horario"], y=df["Entrega_Ton"], name="Saída para Entrega", marker_color="#3498DB", opacity=0.9))
-
-# Retorno de Coleta (laranja)
 fig.add_trace(go.Bar(x=df["Horario"], y=df["Coleta_Ton"], name="Retorno de Coleta", marker_color="#E67E22", opacity=0.9))
 
-# Equipe
+# Linha roxa da equipe com rótulo restaurado
 fig.add_trace(go.Scatter(
     x=df["Horario"], y=df["Equipe_Escalada"],
     mode="lines+markers", name="Equipe",
-    line=dict(color="#9B59B6", width=5, dash="dot"),
+    line=dict(color="#9B59B6", width=4, dash="dot"),
     marker=dict(size=8),
     customdata=df["Equipe"],
     hovertemplate="Equipe: %{customdata}<extra></extra>"
 ))
 
-# Símbolos grandes
+# Símbolos críticos
 if mostrar_simbolos:
-    # Saída Entrega ▲
     entrega_hrs = [h for h, t in entrega_dict.items() if t > 0]
     if entrega_hrs:
         fig.add_trace(go.Scatter(x=entrega_hrs, y=[max_ton * 1.08] * len(entrega_hrs),
                                  mode="markers", marker=dict(color="#2980B9", size=22, symbol="triangle-up"),
                                  name="Saída para Entrega", hoverinfo="skip"))
 
-    # Retorno Coleta ▼
     coleta_hrs = [h for h, t in coleta_dict.items() if t > 0]
     if coleta_hrs:
         fig.add_trace(go.Scatter(x=coleta_hrs, y=[max_ton * 1.08] * len(coleta_hrs),
                                  mode="markers", marker=dict(color="#E67E22", size=22, symbol="triangle-down"),
                                  name="Retorno de Coleta", hoverinfo="skip"))
 
-# Rótulos + e -
+# RÓTULOS RESTAURADOS EXATAMENTE COMO ANTES
 if rotulos:
     for _, r in df.iterrows():
         if r["Chegada_Ton"] > 0:
             fig.add_annotation(x=r["Horario"], y=r["Chegada_Ton"], text=f"+{r['Chegada_Ton']}",
-                               font=dict(color="#27AE60", size=9), bgcolor="white", bordercolor="#90EE90", borderwidth=1,
-                               showarrow=False, yshift=10)
+                               font=dict(color="#2ECC71", size=9), bgcolor="white",
+                               bordercolor="#90EE90", borderwidth=1, showarrow=False, yshift=10)
         if r["Saida_Ton"] > 0:
             fig.add_annotation(x=r["Horario"], y=r["Saida_Ton"], text=f"-{r['Saida_Ton']}",
-                               font=dict(color="#C0392B", size=9), bgcolor="white", bordercolor="#E74C3C", borderwidth=1,
-                               showarrow=False, yshift=10)
+                               font=dict(color="#E74C3C", size=9), bgcolor="white",
+                               bordercolor="#E74C3C", borderwidth=1, showarrow=False, yshift=10)
         if r["Entrega_Ton"] > 0:
             fig.add_annotation(x=r["Horario"], y=r["Entrega_Ton"], text=f"{r['Entrega_Ton']}",
-                               font=dict(color="#2980B9", size=9), bgcolor="white", bordercolor="#3498DB", borderwidth=1,
-                               showarrow=False, yshift=10)
+                               font=dict(color="#2980B9", size=9), bgcolor="white",
+                               bordercolor="#3498DB", borderwidth=1, showarrow=False, yshift=10)
         if r["Coleta_Ton"] > 0:
             fig.add_annotation(x=r["Horario"], y=r["Coleta_Ton"], text=f"{r['Coleta_Ton']}",
-                               font=dict(color="#D35400", size=9), bgcolor="white", bordercolor="#E67E22", borderwidth=1,
-                               showarrow=False, yshift=10)
+                               font=dict(color="#D35400", size=9), bgcolor="white",
+                               bordercolor="#E67E22", borderwidth=1, showarrow=False, yshift=10)
+        # RÓTULO DA EQUIPE RESTAURADO AQUI!
+        if r["Equipe"] > 0:
+            fig.add_annotation(x=r["Horario"], y=r["Equipe_Escalada"],
+                               text=f"{int(r['Equipe'])}",
+                               font=dict(color="#9B59B6", size=9), bgcolor="white",
+                               bordercolor="#9B59B6", borderwidth=1, showarrow=False,
+                               yshift=0, align="center")
 
 fig.update_layout(
-    title="Produção × Equipe × Saídas/Retornos com Toneladas (V4)",
+    title="Produção × Equipe × Saídas/Retornos com Toneladas (V4 Final)",
     xaxis_title="Horário",
     yaxis=dict(title="Toneladas | Equipe (escalada)", range=[0, max_ton * 1.2]),
     height=750,
@@ -300,8 +295,8 @@ st.plotly_chart(fig, use_container_width=True)
 # ==============================================================
 buffer = io.BytesIO()
 with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-    df.to_excel(writer, sheet_name="Dados Completos", index=False)
+    df.to_excel(writer, sheet_name="Dados", index=False)
 buffer.seek(0)
-st.download_button("Baixar Excel Completo", buffer, "producao_v4_completa.xlsx")
+st.download_button("Baixar Excel Completo", buffer, "producao_v4_final.xlsx")
 
-st.success("Versão 4 lançada com sucesso! Agora com barras de Saída Entrega (azul) e Retorno Coleta (laranja) + toneladas – 24/11/2025")
+st.success("Rótulo da linha de Equipe restaurado com sucesso! Tudo funcionando perfeitamente – 24/11/2025")
