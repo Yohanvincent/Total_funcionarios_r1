@@ -6,7 +6,7 @@ import io
 
 st.set_page_config(layout="wide", page_title="Produção vs Equipe - R4")
 
-st.title("Produção vs Equipe + Janelas Críticas com Toneladas (V4 Final)")
+st.title("Produção vs Equipe")
 
 # ================= DADOS FIXOS =================
 chegada_fixa = """03:30 9,6
@@ -229,7 +229,7 @@ if rotulos:
 
 # LEGENDA ABAIXO DO EIXO X
 fig.update_layout(
-    title="Produção × Equipe × Saídas/Retornos com Toneladas (V4 Final)",
+    title="Produção x Equipe (Unidade)",
     xaxis_title="Horário",
     yaxis=dict(title="Toneladas | Equipe (escalada)", range=[0, max_ton * 1.2]),
     height=750,
@@ -275,5 +275,3 @@ with c3:
     st.markdown("#### Retorno de Coleta")
     st.text_area("", value=coleta_fixa, height=140, key="col")
     st.session_state.rotulos = st.checkbox("Mostrar rótulos", value=True)
-
-st.success("Legenda posicionada abaixo do eixo X – tudo funcionando perfeitamente! 27/11/2025")
