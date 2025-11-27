@@ -6,7 +6,7 @@ import io
 
 st.set_page_config(layout="wide", page_title="Produção vs Equipe - R4")
 
-st.title("Produção vs Equipe + Janelas Críticas com Toneladas (V4 Final)")
+st.title("Produção vs Equipe")
 
 # ================= DADOS FIXOS =================
 chegada_fixa = """03:30 9,6
