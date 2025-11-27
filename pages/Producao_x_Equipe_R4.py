@@ -9,7 +9,7 @@ st.set_page_config(layout="wide", page_title="Produção vs Equipe - R4")
 # ==================== TÍTULO E GRÁFICO PRIMEIRO =================
 st.title("Produção vs Equipe + Janelas Críticas com Toneladas (V4 Final)")
 
-# ================= DADOS FIXOS (com seus valores reais) =================
+# ================= DADOS FIXOS =================
 chegada_fixa = """03:30 9,6
 04:20 5,9
 04:50 5,4
@@ -79,7 +79,6 @@ if "init" not in st.session_state:
     st.session_state.nova_confer = confer_fixa
     st.session_state.nova_aux = aux_fixa
     st.session_state.rotulos = True
-    st.session_state.mostrar_simbolos = True
 
 # ================= PROCESSAMENTO =================
 chegada_txt   = st.session_state.nova_chegada
@@ -89,28 +88,27 @@ coleta_input  = st.session_state.coleta_input
 confer_txt    = st.session_state.nova_confer
 aux_txt       = st.session_state.nova_aux
 rotulos       = st.session_state.rotulos
-mostrar_simbolos = st.session_state.mostrar_simbolos
 
-# --- Entrega e Coleta ---
+# --- Processa Entrega e Coleta ---
 entrega_dict = {}
 for linha in entrega_input.strip().split("\n"):
     if not linha.strip(): continue
     p = linha.strip().split()
-    if len(p)>=2:
+    if len(p) >= 2:
         h = p[0]
-        try: entrega_dict[h] = entrega_dict.get(h,0) + float(p[1].replace(",","."))
+        try: entrega_dict[h] = entrega_dict.get(h, 0) + float(p[1].replace(",", "."))
         except: pass
 
 coleta_dict = {}
 for linha in coleta_input.strip().split("\n"):
     if not linha.strip(): continue
     p = linha.strip().split()
-    if len(p)>=2:
+    if len(p) >= 2:
         h = p[0]
-        try: coleta_dict[h] = coleta_dict.get(h,0) + float(p[1].replace(",","."))
+        try: coleta_dict[h] = coleta_dict.get(h, 0) + float(p[1].replace(",", "."))
         except: pass
 
-# --- Chegadas e Saídas ---
+# --- Extrai Chegada e Saída ---
 def extrair_producao(texto):
     cheg, said = {}, {}
     modo = None
@@ -120,30 +118,30 @@ def extrair_producao(texto):
         if l == "Saida Ton.": modo = "said"; continue
         if not l or modo is None: continue
         p = l.split()
-        if len(p)<2: continue
+        if len(p) < 2: continue
         h = p[0]
         try:
-            v = float(p[1].replace(",","."))
-            if modo=="cheg": cheg[h] = cheg.get(h,0)+v
-            else: said[h] = said.get(h,0)+v
+            v = float(p[1].replace(",", "."))
+            if modo == "cheg": cheg[h] = cheg.get(h, 0) + v
+            else: said[h] = said.get(h, 0) + v
         except: pass
     return cheg, said
 
 cheg, said = extrair_producao(f"Cheg. Ton.\n{chegada_txt}\nSaida Ton.\n{saida_txt}")
 
-# --- Jornadas e horários ---
+# --- Jornadas e horários
 def jornadas(t):
     j = []
     for l in t.strip().split("\n"):
         p = l.strip().split()
-        if len(p)==5 and p[4].isdigit():
+        if len(p) == 5 and p[4].isdigit():
             j.append({"t":"c","e":p[0],"si":p[1],"ri":p[2],"sf":p[3],"q":int(p[4])})
-        elif len(p)==3 and p[2].isdigit():
+        elif len(p) == 3 and p[2].isdigit():
             j.append({"t":"m","e":p[0],"sf":p[1],"q":int(p[2])})
     return j
 
 def min_hora(h):
-    try: hh,mm = map(int,h.split(":")); return hh*60+mm
+    try: hh,mm = map(int,h.split(":")); return hh*60 + mm
     except: return 0
 
 def todos_horarios(*texts):
@@ -151,8 +149,8 @@ def todos_horarios(*texts):
     for t in texts:
         for l in t.strip().split("\n"):
             p = l.strip().split()
+            if len(p) >= 2: s.add(p[0])
             if len(p) in (3,5): s.update(p[:-1])
-            elif len(p)>=2: s.add(p[0])
     return sorted(s, key=min_hora)
 
 jorn_conf = jornadas(confer_txt)
@@ -178,110 +176,94 @@ def calcular_equipe(jlist, hrs):
 
 eq_total = [a+b for a,b in zip(calcular_equipe(jorn_conf,horarios), calcular_equipe(jorn_aux,horarios))]
 
-# DataFrame final
+# DataFrame
 df = pd.DataFrame({
     "Horario": horarios,
     "Chegada_Ton": [round(cheg.get(h,0),1) for h in horarios],
-    "Saida_Ton"  : [round(said.get(h,0),1) for h in horarios],
+    "Saida_Ton" : [round(said.get(h,0),1) for h in horarios],
     "Entrega_Ton": [round(entrega_dict.get(h,0),1) for h in horarios],
     "Coleta_Ton" : [round(coleta_dict.get(h,0),1) for h in horarios],
-    "Equipe"     : eq_total
+    "Equipe" : eq_total
 })
 
-max_ton = max(df[["Chegada_Ton","Saida_Ton","Entrega_Ton","Coleta_Ton"]].max()) + 10
-scale = max_ton / (df["Equipe"].max() + 5) if df["Equipe"].max()>0 else 1
+max_ton = df[["Chegada_Ton","Saida_Ton","Entrega_Ton","Coleta_Ton"]].max().max() + 10
+scale = max_ton / (df["Equipe"].max() + 5) if df["Equipe"].max() > 0 else 1
 df["Equipe_Escalada"] = df["Equipe"] * scale
 
-# ================= GRÁFICO =================
+# ================= GRÁFICO LIMPO – SEM TRIÂNGULOS! =================
 fig = go.Figure()
 
 fig.add_trace(go.Bar(x=df["Horario"], y=df["Chegada_Ton"], name="Chegada", marker_color="#90EE90", opacity=0.8))
-fig.add_trace(go.Bar(x=df["Horario"], y=df["Saida_Ton"],   name="Saída Carregada", marker_color="#E74C3C", opacity=0.8))
+fig.add_trace(go.Bar(x=df["Horario"], y=df["Saida_Ton"], name="Saída Carregada", marker_color="#E74C3C", opacity=0.8))
 fig.add_trace(go.Bar(x=df["Horario"], y=df["Entrega_Ton"], name="Saída para Entrega", marker_color="#3498DB", opacity=0.9))
-fig.add_trace(go.Bar(x=df["Horario"], y=df["Coleta_Ton"],  name="Retorno de Coleta", marker_color="#E67E22", opacity=0.9))  # ← COR CORRIGIDA
+fig.add_trace(go.Bar(x=df["Horario"], y=df["Coleta_Ton"], name="Retorno de Coleta", marker_color="#E67E22", opacity=0.9))
 
 fig.add_trace(go.Scatter(
     x=df["Horario"], y=df["Equipe_Escalada"],
-    mode="lines+markers", name="Equipe",
-    line=dict(color="#9B59B6", width=4, dash="dot"),
-    marker=dict(size=8),
-    customdata=df["Equipe"],
-    hovertemplate="Equipe: %{customdata}<extra></extra>"
+    mode="lines+markers", name="Equipe Disponível",
+    line=dict(color="#9B59B6", width=5, dash="dot"),
+    marker=dict(size=10),
+    text=df["Equipe"],
+    textposition="top center",
+    textfont=dict(size=11, color="#9B59B6"),
+    hovertemplate="Equipe: <b>%{text}</b> pessoas<extra></extra>"
 ))
 
-if mostrar_simbolos:
-    if entrega_dict:
-        fig.add_trace(go.Scatter(x=list(entrega_dict.keys()), y=[max_ton*1.08]*len(entrega_dict),
-                                 mode="markers", marker=dict(color="#2980B9", size=22, symbol="triangle-up"),
-                                 name="Saída p/ Entrega", hoverinfo="skip"))
-    if coleta_dict:
-        fig.add_trace(go.Scatter(x=list(coleta_dict.keys()), y=[max_ton*1.08]*len(coleta_dict),
-                                 mode="markers", marker=dict(color="#E67E22", size=22, symbol="triangle-down"),
-                                 name="Retorno Coleta", hoverinfo="skip"))
-
+# RÓTULOS (mantidos)
 if rotulos:
-    for _,r in df.iterrows():
-        if r["Chegada_Ton"]>0:
+    for _, r in df.iterrows():
+        if r["Chegada_Ton"] > 0:
             fig.add_annotation(x=r["Horario"], y=r["Chegada_Ton"], text=f"+{r['Chegada_Ton']}",
-                               font=dict(color="#2ECC71",size=9), bgcolor="white", bordercolor="#90EE90", borderwidth=1,
-                               showarrow=False, yshift=10)
-        if r["Saida_Ton"]>0:
+                               font=dict(color="#2ECC71", size=10, weight="bold"), showarrow=False, yshift=12)
+        if r["Saida_Ton"] > 0:
             fig.add_annotation(x=r["Horario"], y=r["Saida_Ton"], text=f"-{r['Saida_Ton']}",
-                               font=dict(color="#E74C3C",size=9), bgcolor="white", bordercolor="#E74C3C", borderwidth=1,
-                               showarrow=False, yshift=10)
-        if r["Entrega_Ton"]>0:
+                               font=dict(color="#E74C3C", size=10, weight="bold"), showarrow=False, yshift=12)
+        if r["Entrega_Ton"] > 0:
             fig.add_annotation(x=r["Horario"], y=r["Entrega_Ton"], text=f"{r['Entrega_Ton']}",
-                               font=dict(color="#2980B9",size=9), bgcolor="white", bordercolor="#3498DB", borderwidth=1,
-                               showarrow=False, yshift=10)
-        if r["Coleta_Ton"]>0:
+                               font=dict(color="#2980B9", size=10, weight="bold"), showarrow=False, yshift=12)
+        if r["Coleta_Ton"] > 0:
             fig.add_annotation(x=r["Horario"], y=r["Coleta_Ton"], text=f"{r['Coleta_Ton']}",
-                               font=dict(color="#D35400",size=9), bgcolor="white", bordercolor="#E67E22", borderwidth=1,
-                               showarrow=False, yshift=10)
-        if r["Equipe"]>0:
-            fig.add_annotation(x=r["Horario"], y=r["Equipe_Escalada"], text=f"{int(r['Equipe'])}",
-                               font=dict(color="#9B59B6",size=9), bgcolor="white", bordercolor="#9B59B6", borderwidth=1,
-                               showarrow=False, yshift=0)
+                               font=dict(color="#D35400", size=10, weight="bold"), showarrow=False, yshift=12)
 
 fig.update_layout(
-    title="Produção × Equipe × Saídas/Retornos com Toneladas (V4 Final)",
+    title="",
     xaxis_title="Horário",
-    yaxis=dict(title="Toneladas | Equipe (escalada)", range=[0, max_ton*1.2]),
-    height=750,
+    yaxis=dict(title="Toneladas | Equipe (escalada)", range=[0, max_ton * 1.25]),
+    height=800,
     barmode="relative",
     hovermode="x unified",
-    legend=dict(orientation="h", y=1.1, x=0),
-    margin=dict(t=100)
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    margin=dict(l=50, r=50, t=60, b=80)
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
 # Download Excel
 buffer = io.BytesIO()
-with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-    df.to_excel(writer, sheet_name="Dados", index=False)
+with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+    df.to_excel(writer, sheet_name='Operação Completa', index=False)
 buffer.seek(0)
-st.download_button("Baixar Excel Completo", buffer, "producao_v4_final.xlsx")
+st.download_button("Baixar dados em Excel", buffer, f"operacao_{pd.Timestamp('today').strftime('%d%m%Y')}.xlsx")
 
-# ================= INPUTS (só agora) =================
+# ================= INPUTS LÁ EMBAIXO =================
 st.markdown("---")
-st.markdown("### Cole novos dados (opcional – substitui os fixos)")
+st.markdown("### ✏️ Editar Dados (Opcional)")
 
-c1, c2, c3 = st.columns([2,2,2])
+c1, c2, c3 = st.columns(3)
 
 with c1:
-    st.session_state.nova_chegada = st.text_area("Chegadas (horário tonelada)", value=chegada_fixa, height=220, key="ch")
-    st.session_state.nova_confer   = st.text_area("Conferentes", value=confer_fixa, height=220, key="cf")
+    st.session_state.nova_chegada = st.text_area("Chegadas", value=chegada_fixa, height=300, key="ch")
+    st.session_state.nova_confer = st.text_area("Conferentes", value=confer_fixa, height=300, key="cf")
 
 with c2:
-    st.session_state.nova_saida = st.text_area("Saídas (horário tonelada)", value=saida_fixa, height=220, key="sd")
-    st.session_state.nova_aux   = st.text_area("Auxiliares", value=aux_fixa, height=220, key="au")
+    st.session_state.nova_saida = st.text_area("Saídas Carregamento", value=saida_fixa, height=300, key="sd")
+    st.session_state.nova_aux = st.text_area("Auxiliares", value=aux_fixa, height=300, key="au")
 
 with c3:
-    st.markdown("#### Saída para Entrega (hora + ton)")
-    st.session_state.entrega_input = st.text_area("", value=entrega_fixa, height=220, key="ent")
-    st.markdown("#### Retorno de Coleta (hora + ton)")
-    st.session_state.coleta_input  = st.text_area("", value=coleta_fixa, height=220, key="col")
-    st.session_state.rotulos = st.checkbox("Rótulos", value=True)
-    st.session_state.mostrar_simbolos = st.checkbox("Mostrar símbolos e barras de Saída/Retorno", value=True)
+    st.markdown("#### Saída para Entrega")
+    st.session_state.entrega_input = st.text_area("", value=entrega_fixa, height=150, key="ent")
+    st.markdown("#### Retorno de Coleta")
+    st.session_state.coleta_input = st.text_area("", value=coleta_fixa, height=150, key="col")
+    st.session_state.rotulos = st.checkbox("Mostrar rótulos de tonelada", value=True)
 
-st.success("Tudo funcionando – dados de entrega e coleta já carregados! 27/11/2025")
+st.success("Triângulos removidos com sucesso! Gráfico limpo e profissional ✓")
