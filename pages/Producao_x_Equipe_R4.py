@@ -229,7 +229,7 @@ if rotulos:
 
 # LEGENDA ABAIXO DO EIXO X
 fig.update_layout(
-    title="Produção × Equipe × Saídas/Retornos com Toneladas (V4 Final)",
+    title="Produção × Equipe",
     xaxis_title="Horário",
     yaxis=dict(title="Toneladas | Equipe (escalada)", range=[0, max_ton * 1.2]),
     height=750,
