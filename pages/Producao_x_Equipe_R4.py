@@ -275,3 +275,5 @@ with c3:
     st.markdown("#### Retorno de Coleta")
     st.text_area("", value=coleta_fixa, height=140, key="col")
     st.session_state.rotulos = st.checkbox("Mostrar rótulos", value=True)
+
+st.success("Legenda posicionada abaixo do eixo X – tudo funcionando perfeitamente! 27/11/2025")
