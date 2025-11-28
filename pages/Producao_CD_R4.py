@@ -40,6 +40,7 @@ if "init" not in st.session_state:
 
     st.session_state.rotulos = True
 
+
 # =============== FUNÇÕES AUXILIARES ===============
 def hora_para_minutos(hora_str):
     try:
@@ -56,23 +57,17 @@ def todos_horarios():
         st.session_state.conferente,
         st.session_state.auxiliar
     ]
-
     for texto in textos:
         for linha in texto.strip().split("\n"):
             if not linha.strip():
                 continue
-            p = linha.split()
-            horarios.add(p[0])
-
+            horarios.add(linha.split()[0])
     return sorted(horarios, key=hora_para_minutos)
 
 def parse_jornadas(texto):
     jornadas = []
     for linha in texto.strip().split("\n"):
-        if not linha.strip(): 
-            continue
         p = linha.split()
-
         if len(p) == 5 and p[4].isdigit():
             jornadas.append({
                 "tipo": "completa",
@@ -89,7 +84,6 @@ def parse_jornadas(texto):
                 "sf": hora_para_minutos(p[1]),
                 "qtd": int(p[2])
             })
-
     return jornadas
 
 def calcular_equipe(horarios_str, jornadas):
@@ -114,7 +108,6 @@ def calcular_equipe(horarios_str, jornadas):
         else:
             sf = j["sf"]
             if sf < e: sf += 1440
-
             for i, t in enumerate(mins):
                 t24 = t + 1440 if t < e else t
                 if e <= t24 <= sf:
@@ -122,37 +115,32 @@ def calcular_equipe(horarios_str, jornadas):
 
     return equipe
 
-# =============== PROCESSAMENTO DOS DADOS ===============
+
+# =============== PROCESSAMENTO ===============
 
 horarios = todos_horarios()
 
-# Chegadas
 chegadas = {}
 for linha in st.session_state.chegada.strip().split("\n"):
     p = linha.split()
-    if len(p) >= 2:
-        try:
-            ton = float(p[1].replace(",", "."))
-            chegadas[p[0]] = chegadas.get(p[0], 0) + ton
-        except:
-            pass
+    try:
+        ton = float(p[1].replace(",", "."))
+        chegadas[p[0]] = chegadas.get(p[0], 0) + ton
+    except:
+        pass
 
-# Saídas
 saidas = {}
 for linha in st.session_state.saida.strip().split("\n"):
     p = linha.split()
-    if len(p) >= 2:
-        try:
-            ton = float(p[1].replace(",", "."))
-            saidas[p[0]] = saidas.get(p[0], 0) + ton
-        except:
-            pass
+    try:
+        ton = float(p[1].replace(",", "."))
+        saidas[p[0]] = saidas.get(p[0], 0) + ton
+    except:
+        pass
 
-# Equipe
 jornadas = parse_jornadas(st.session_state.conferente) + parse_jornadas(st.session_state.auxiliar)
 equipe_total = calcular_equipe(horarios, jornadas)
 
-# DataFrame
 df = pd.DataFrame({
     "Horário": horarios,
     "Chegada": [round(chegadas.get(h, 0), 1) for h in horarios],
@@ -160,46 +148,63 @@ df = pd.DataFrame({
     "Equipe": equipe_total
 })
 
-# Escala da equipe → compatível com toneladas
 max_ton = max(df["Chegada"].max(), df["Saída"].max(), 1) + 10
 scale = max_ton / (df["Equipe"].max() + 10) if df["Equipe"].max() else 1
 df["EquipeEscalada"] = df["Equipe"] * scale
 
+
 # ===============================================================
-#                       GRÁFICO (VISUAL AJUSTADO)
+#                GRÁFICO AJUSTADO DEFINITIVO
 # ===============================================================
 
+# Cores suaves exatas do modelo anterior
+cor_verde = "#90EE90"
+cor_vermelho = "#E74C3C"
+cor_roxo = "#9B59B6"
+
+# Fonte padrão
+fonte_padrao = dict(color="black", size=14, family="Arial")
+
+# Função para criar rótulo com caixa branca + borda colorida
+def estilo_rotulo(cor_borda):
+    return dict(
+        bgcolor="white",
+        bordercolor=cor_borda,
+        borderwidth=2,
+        font=dict(color=cor_borda, size=14, family="Arial")
+    )
+
+# ---------------------------------------------------------
 fig = go.Figure()
 
-# Cores suaves
-cor_verde = "#B7F7B7"
-cor_vermelho = "#F6B3B3"
-cor_roxo = "#D3B6E6"
-
-# ---------- BARRAS EMPILHADAS ----------
+# ----- Chegada -----
 fig.add_trace(go.Bar(
     x=df["Horário"], 
     y=df["Chegada"],
     name="Chegada",
     marker_color=cor_verde,
-    text=df["Chegada"].apply(lambda x: f"+{x}" if x > 0 else ""),
+    text=[f"+{v}" if v > 0 else "" for v in df["Chegada"]],
     textposition="outside",
-    textfont=dict(color="black", size=16, family="Arial", weight="bold"),
+    textfont=dict(color=cor_verde, size=14),
+    insidetextanchor="end",
+    texttemplate="<span style='color:%s;'><b>%{text}</b></span>" % cor_verde,
     hovertemplate="%{y} Ton<extra></extra>"
 ))
 
+# ----- Saída -----
 fig.add_trace(go.Bar(
     x=df["Horário"], 
     y=df["Saída"],
     name="Saída",
     marker_color=cor_vermelho,
-    text=df["Saída"].apply(lambda x: f"-{x}" if x > 0 else ""),
+    text=[f"-{v}" if v > 0 else "" for v in df["Saída"]],
     textposition="outside",
-    textfont=dict(color="black", size=16, family="Arial", weight="bold"),
+    textfont=dict(color=cor_vermelho, size=14),
+    texttemplate="<span style='color:%s;'><b>%{text}</b></span>" % cor_vermelho,
     hovertemplate="%{y} Ton<extra></extra>"
 ))
 
-# ---------- LINHA DA EQUIPE ----------
+# ----- Linha da Equipe -----
 fig.add_trace(go.Scatter(
     x=df["Horário"],
     y=df["EquipeEscalada"],
@@ -207,39 +212,38 @@ fig.add_trace(go.Scatter(
     name="Equipe",
     line=dict(color=cor_roxo, width=4, dash="dot"),
     marker=dict(size=9, color=cor_roxo),
-    text=df["Equipe"],
+    text=df["Equipe"].astype(str),
     textposition="top center",
-    textfont=dict(color="#6C3483", size=17, family="Arial", weight="bold"),
-    customdata=df["Equipe"],
-    hovertemplate="Equipe: %{customdata}<extra></extra>"
+    textfont=dict(color=cor_roxo, size=14),
+    hovertemplate="Equipe: %{text}<extra></extra>"
 ))
 
+# ----- Layout -----
 fig.update_layout(
-    title="Produção × Equipe – Chegada / Saída / Equipe (Estilo Suave)",
+    title="Produção × Equipe – Chegada / Saída / Equipe",
     xaxis_title="Horário",
-    yaxis_title="Toneladas | Equipe (escalada)",
-    height=820,
+    yaxis_title="Toneladas | Equipe (Escalada)",
+    height=780,
     barmode="stack",
-    hovermode="x unified",
     plot_bgcolor="white",
     paper_bgcolor="white",
-    bargap=0.15,
+    bargap=0.17,
+    font=fonte_padrao,
     legend=dict(
         orientation="h",
-        yanchor="top",
-        y=-0.18,
+        yanchor="bottom",
+        y=-0.2,
         xanchor="center",
-        x=0.5,
-        bgcolor="rgba(255,255,255,0.95)",
-        bordercolor="#ccc",
-        borderwidth=1
+        x=0.5
     ),
-    margin=dict(l=70, r=70, t=110, b=160)
+    margin=dict(l=70, r=70, t=100, b=160)
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
-# ================= DOWNLOAD =================
+# ===============================================================
+#                       DOWNLOAD EXCEL
+# ===============================================================
 
 buffer = io.BytesIO()
 with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
@@ -253,7 +257,9 @@ st.download_button(
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
 
-# ================= EDIÇÃO DOS CAMPOS =================
+# ===============================================================
+#                     CAMPOS DE EDIÇÃO
+# ===============================================================
 
 st.markdown("---")
 c1, c2 = st.columns(2)
@@ -266,4 +272,3 @@ with c2:
     st.session_state.saida = st.text_area("Saídas (hora ton)", st.session_state.saida, height=300)
     st.session_state.auxiliar = st.text_area("Jornadas Auxiliares", st.session_state.auxiliar, height=300)
 
-st.session_state.rotulos = st.checkbox("Mostrar rótulos", value=True)
