@@ -178,42 +178,85 @@ cor_roxo = "#D3B6E6"
 
 # ---------- BARRAS EMPILHADAS ----------
 
+# Chegada (verde claro)
 fig.add_trace(go.Bar(
     x=df["Horário"], 
     y=df["Chegada"],
     name="Chegada",
-    marker_color=cor_verde,
+    marker_color="#90EE90",
     text=df["Chegada"].apply(lambda x: f"+{x}" if x > 0 else ""),
-    textposition="inside",
-    insidetextanchor="middle",
-    textfont=dict(color="black"),
+    textposition="outside",  # >>> rótulo fora da barra
+    textfont=dict(
+        color="black",
+        size=16,
+        family="Arial",
+        weight="bold"
+    ),
     hovertemplate="%{y} Ton<extra></extra>"
 ))
 
+# Saída (vermelho suave)
 fig.add_trace(go.Bar(
     x=df["Horário"], 
     y=df["Saída"],
     name="Saída",
-    marker_color=cor_vermelho,
+    marker_color="#FF847C",
     text=df["Saída"].apply(lambda x: f"-{x}" if x > 0 else ""),
-    textposition="inside",
-    insidetextanchor="middle",
-    textfont=dict(color="black"),
+    textposition="outside",  # >>> rótulo fora
+    textfont=dict(
+        color="black",
+        size=16,
+        family="Arial",
+        weight="bold"
+    ),
     hovertemplate="%{y} Ton<extra></extra>"
 ))
 
-# ---------- LINHA DA EQUIPE (SUAVIZADA) ----------
+# ---------- LINHA DA EQUIPE ----------
 fig.add_trace(go.Scatter(
     x=df["Horário"],
     y=df["EquipeEscalada"],
-    mode="lines+markers",
+    mode="lines+markers+text",  # >>> adiciona rótulo
     name="Equipe",
-    line=dict(color=cor_roxo, width=4, dash="dot"),
-    marker=dict(size=9, color=cor_roxo),
-    customdata=df["Equipe"],
-    hovertemplate="Equipe: %{customdata}<extra></extra>"
+    line=dict(color="#C39BD3", width=4, dash="dot"),
+    marker=dict(size=9, color="#C39BD3"),
+    text=df["Equipe"],              # >>> valores reais
+    textposition="top center",      # >>> texto acima dos pontos
+    textfont=dict(
+        color="#4A235A",            # tom roxo escuro para contraste
+        size=18,
+        family="Arial",
+        weight="bold"
+    ),
+    hovertemplate="Equipe: %{customdata}<extra></extra>",
+    customdata=df["Equipe"]
 ))
 
+# ---------- LAYOUT ----------
+fig.update_layout(
+    title="Produção × Equipe – Chegada / Saída / Equipe",
+    xaxis_title="Horário",
+    yaxis_title="Toneladas | Equipe (escalada)",
+    height=820,
+    barmode="stack",
+    hovermode="x unified",
+    plot_bgcolor="white",
+    paper_bgcolor="white",
+    bargap=0.15,
+    legend=dict(
+        orientation="h",
+        yanchor="top",
+        y=-0.18,
+        xanchor="center",
+        x=0.5,
+        bgcolor="rgba(255,255,255,0.95)",
+        bordercolor="#ccc",
+        borderwidth=1
+    ),
+    margin=dict(l=70, r=70, t=110, b=160)
+)
+
+st.plotly_chart(fig, use_container_width=True)
 # ---------- LAYOUT ----------
 fig.update_layout(
     title="Produção × Equipe – Chegada / Saída / Equipe (Estilo Suave)",
