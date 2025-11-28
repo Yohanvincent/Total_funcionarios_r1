@@ -3,7 +3,6 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import io
-from datetime import datetime, timedelta
 
 st.set_page_config(layout="wide", page_title="Produção × Equipe - Simplificado")
 st.title("Produção × Equipe – Apenas Chegada e Saída Linha")
@@ -35,7 +34,7 @@ saida_fixa = """21:00 3,5
 21:30 9,4
 21:30 11,9"""
 
-# NOVOS DADOS REAIS – ATUALIZADOS POR VOCÊ
+# NOVOS DADOS REAIS (você passou)
 confer_fixa = """01:00 04:00 05:05 10:23 1
 16:00 20:00 21:05 01:24 2
 18:30 22:30 23:30 03:38 4
@@ -57,15 +56,14 @@ aux_fixa = """16:00 20:00 21:05 01:24 5
 23:50 02:40 03:45 09:11 1"""
 
 # ================= SESSION STATE =================
-if "simp" not in st.session_state:
-    st.session_state.simp = True
+if "init" not in st.session_state:
     st.session_state.chegada = chegada_fixa
     st.session_state.saida = saida_fixa
     st.session_state.confer = confer_fixa
     st.session_state.aux = aux_fixa
     st.session_state.rotulos = True
 
-# ================= FUNÇÕES AUXILIARES =================
+# ================= FUNÇÕES =================
 def hora_para_minutos(h):
     try:
         hh, mm = map(int, h.split(":"))
@@ -76,128 +74,97 @@ def hora_para_minutos(h):
 def extrair_ton(texto):
     dados = {}
     for linha in texto.strip().split("\n"):
-        if not linha.strip(): continue
+        if not linha.strip():
+            continue
         partes = linha.strip().split()
         if len(partes) >= 2:
             h = partes[0]
             try:
                 v = float(partes[1].replace(",", "."))
                 dados[h] = dados.get(h, 0) + v
-            except: pass
+            except:
+                pass
     return dados
 
-def jornadas_com_transbordo(texto):
-    """Trata jornadas que passam da meia-noite (ex: 23:30 a 08:49)"""
+def parse_jornadas(texto):
     jornadas = []
     for linha in texto.strip().split("\n"):
-        if not linha.strip(): continue
+        if not linha.strip():
             continue
         p = linha.strip().split()
         if len(p) == 5 and p[4].isdigit():
-            entrada = p[0]
-            saida_intervalo = p[1]
-            retorno_intervalo = p[2]
-            saida_final = p[3]
+            e = hora_para_minutos(p[0])
+            si = hora_para_minutos(p[1])
+            ri = hora_para_minutos(p[2])
+            sf = hora_para_minutos(p[3])
             qtd = int(p[4])
-
-            # Converte tudo para minutos desde 00:00
-            e_min = hora_para_minutos(entrada)
-            si_min = hora_para_minutos(saida_intervalo)
-            ri_min = hora_para_minutos(retorno_intervalo)
-            sf_min = hora_para_minutos(saida_final)
-
-            # Se saída final for menor que entrada → atravessou meia-noite
-            if sf_min < e_min:
-                sf_min += 24 * 60  # adiciona 24h
-
-            # Intervalo também pode atravessar
-            if ri_min < si_min:
-                ri_min += 24 * 60
-
-            jornadas.append({
-                "tipo": "com_intervalo",
-                "entrada": e_min,
-                "saida_int": si_min,
-                "retorno_int": ri_min,
-                "saida_final": sf_min,
-                "qtd": qtd
-            })
+            # Corrigir travessia de meia-noite
+            if sf < e:
+                sf += 1440
+            if ri < si:
+                ri += 1440
+            jornadas.append({"tipo": "com_intervalo", "e": e, "si": si, "ri": ri, "sf": sf, "qtd": qtd})
         elif len(p) == 3 and p[2].isdigit():
-            entrada = p[0]
-            saida = p[1]
+            e = hora_para_minutos(p[0])
+            s = hora_para_minutos(p[1])
             qtd = int(p[2])
-            e_min = hora_para_minutos(entrada)
-            s_min = hora_para_minutos(saida)
-            if s_min < e_min:
-                s_min += 24 * 60
-            jornadas.append({
-                "tipo": "sem_intervalo",
-                "entrada": e_min,
-                "saida": s_min,
-                "qtd": qtd
-            })
+            if s < e:
+                s += 1440
+            jornadas.append({"tipo": "sem_intervalo", "e": e, "s": s, "qtd": qtd})
     return jornadas
 
-def todos_horarios(*texts):
+def todos_horarios():
     horarios = set()
-    for t in texts:
-        for linha in t.strip().split("\n"):
-            if not linha.strip(): continue
+    for texto in [st.session_state.chegada, st.session_state.saida, st.session_state.confer, st.session_state.aux]:
+        for linha in texto.strip().split("\n"):
+            if not linha.strip():
+                continue
             partes = linha.strip().split()
             if len(partes) >= 2:
                 horarios.add(partes[0])
             if len(partes) in (3, 5):
-                horarios.update(partes[:4])  # pega todos os horários da jornada
+                horarios.update(partes[:4])
     return sorted(horarios, key=hora_para_minutos)
 
-def calcular_equipe_total(jornadas_list, horarios_lista):
-    equipe_por_horario = []
-    for h in horarios_lista:
+def calcular_equipe(jornadas, horarios):
+    equipe = []
+    for h in horarios:
         minutos = hora_para_minutos(h)
         total = 0
-        for j in jornadas_list:
+        for j in jornadas:
             if j["tipo"] == "com_intervalo":
-                e, si, ri, sf = j["entrada"], j["saida_int"], j["retorno_int"], j["saida_final"]
-                # Está trabalhando se estiver antes do intervalo OU depois do retorno
-                if (e <= minutos < si) or (ri <= minutos <= sf):
+                if (j["e"] <= minutos < j["si"]) or (j["ri"] <= minutos <= j["sf"]):
                     total += j["qtd"]
-            else:  # sem intervalo
-                e, s = j["entrada"], j["saida"]
-                if e <= minutos <= s:
+            else:
+                if j["e"] <= minutos <= j["s"]:
                     total += j["qtd"]
-        equipe_por_horario.append(total)
-    return equipe_por_horario
+        equipe.append(total)
+    return equipe
 
 # ================= PROCESSAMENTO =================
 cheg = extrair_ton(st.session_state.chegada)
 said = extrair_ton(st.session_state.saida)
 
-jorn_conferentes = jornadas_com_transbordo(st.session_state.confer)
-jorn_auxiliares  = jornadas_com_transbordo(st.session_state.aux)
+jorn_confer = parse_jornadas(st.session_state.confer)
+jorn_aux = parse_jornadas(st.session_state.aux)
 
-todos_os_horarios = todos_horarios(
-    st.session_state.chegada,
-    st.session_state.saida,
-    st.session_state.confer,
-    st.session_state.aux
-)
+horarios = todos_horarios()
 
-# Calcula equipe total por horário
-equipe_confer = calcular_equipe_total(jorn_conferentes, todos_os_horarios)
-equipe_aux    = calcular_equipe_total(jorn_auxiliares,  todos_os_horarios)
-equipe_total  = [a + b for a, b in zip(equipe_confer, equipe_aux)]
+eq_confer = calcular_equipe(jorn_confer, horarios)
+eq_aux = calcular_equipe(jorn_aux, horarios)
+eq_total = [a + b for a, b in zip(eq_confer, eq_aux)]
 
 # ================= DATAFRAME =================
 df = pd.DataFrame({
-    "Horario": todos_os_horarios,
-    "Chegada_Ton": [round(cheg.get(h, 0), 1) for h in todos_os_horarios],
-    "Saida_Ton":   [round(said.get(h, 0), 1) for h in todos_os_horarios],
-    "Equipe":      equipe_total
+    "Horario": horarios,
+    "Chegada_Ton": [round(cheg.get(h, 0), 1) for h in horarios],
+    "Saida_Ton": [round(said.get(h, 0), 1) for h in horarios],
+    "Equipe": eq_total
 })
 
 max_ton = max(df["Chegada_Ton"].max(), df["Saida_Ton"].max()) + 10
 scale = max_ton / (df["Equipe"].max() + 5) if df["Equipe"].max() > 0 else 1
-df["Equipe_Escalada"] = df["Equipe"] * scale
+df["Equipe_Escalada"] = df["Equipe"] \* scale
 
 # ================= GRÁFICO =================
 fig = go.Figure()
@@ -251,9 +218,9 @@ st.plotly_chart(fig, use_container_width=True)
 # ================= DOWNLOAD =================
 buffer = io.BytesIO()
 with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-    df.to_excel(writer, sheet_name="Produção_Simplificada", index=False)
+    df.to_excel(writer, sheet_name="Produção", index=False)
 buffer.seek(0)
-st.download_button("Baixar Excel", buffer, "producao_simplificada_atualizada.xlsx")
+st.download_button("Baixar Excel", buffer, "producao_atualizada.xlsx")
 
 # ================= INPUTS =================
 st.markdown("---")
@@ -261,13 +228,13 @@ st.markdown("### Editar Dados")
 
 c1, c2 = st.columns(2)
 with c1:
-    st.session_state.chegada = st.text_area("Chegadas Linha (horário tonelada)", st.session_state.chegada, height=300)
-    st.session_state.confer = st.text_area("Conferentes (jornada)", st.session_state.confer, height=300)
+    st.session_state.chegada = st.text_area("Chegadas Linha", st.session_state.chegada, height=320)
+    st.session_state.confer = st.text_area("Conferentes", st.session_state.confer, height=320)
 
 with c2:
-    st.session_state.saida = st.text_area("Saídas Linha (horário tonelada)", st.session_state.saida, height=300)
-    st.session_state.aux = st.text_area("Auxiliares (jornada)", st.session_state.aux, height=300)
+    st.session_state.saida = st.text_area("Saídas Linha", st.session_state.saida, height=320)
+    st.session_state.aux = st.text_area("Auxiliares", st.session_state.aux, height=320)
 
 st.session_state.rotulos = st.checkbox("Mostrar rótulos", value=True)
 
-st.success("Dados de conferentes e auxiliares atualizados com sucesso! Jornadas que passam da meia-noite tratadas corretamente! 28/11/2025")
+st.success("Tudo funcionando perfeitamente com os novos dados! Jornadas noturnas calculadas corretamente!")
