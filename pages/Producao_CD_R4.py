@@ -154,82 +154,90 @@ df["EquipeEscalada"] = df["Equipe"] * scale
 
 
 # ===============================================================
-#                       GRÁFICO (VISUAL AJUSTADO FINAL)
+#                       GRÁFICO (VERSÃO AJUSTADA)
 # ===============================================================
 
 fig = go.Figure()
 
-# Cores suaves
-cor_verde = "#90EE90"
-cor_vermelho = "#E74C3C"
-cor_roxo = "#9B59B6"
+# === CORES SUAVES PROFISSIONAIS ===
+cor_verde = "#7ED6A5"     # Chegada
+cor_vermelho = "#FF7B7B"  # Saída
+cor_roxo = "#B69CFF"      # Equipe
 
-# ---------- BARRAS ----------
+# Transformar saída em valores negativos para ir abaixo do eixo
+df["SaidaNeg"] = df["Saída"] * -1
+
+# ----------------- BARRA CHEGADA -----------------
 fig.add_trace(go.Bar(
     x=df["Horário"],
     y=df["Chegada"],
     name="Chegada",
     marker_color=cor_verde,
-    hovertemplate="%{y} Ton<extra></extra>",
+    hovertemplate="%{y} Ton<extra></extra>"
 ))
 
+# ----------------- BARRA SAÍDA (NEGATIVA) -----------------
 fig.add_trace(go.Bar(
     x=df["Horário"],
-    y=df["Saída"],
+    y=df["SaidaNeg"],
     name="Saída",
     marker_color=cor_vermelho,
-    hovertemplate="%{y} Ton<extra></extra>",
+    hovertemplate="- %{customdata} Ton<extra></extra>",
+    customdata=df["Saída"]
 ))
 
-# ---------- LINHA DA EQUIPE ----------
+# ----------------- LINHA DA EQUIPE -----------------
 fig.add_trace(go.Scatter(
     x=df["Horário"],
     y=df["EquipeEscalada"],
-    mode="lines+markers",
+    mode="lines+markers+text",
     name="Equipe",
     line=dict(color=cor_roxo, width=3),
     marker=dict(size=7, color=cor_roxo),
+    text=df["Equipe"],
+    textposition="top center",
+    textfont=dict(size=12, color=cor_roxo),
     hovertemplate="Equipe: %{customdata}<extra></extra>",
     customdata=df["Equipe"]
 ))
 
 # ===============================================================
-#                ANOTAÇÕES (RÓTULOS COLORIDOS)
+#           RÓTULOS COLORIDOS (PADRÃO UNIFORME)
 # ===============================================================
 
 anotacoes = []
 
-# Rótulos de Chegada
+# Rótulos Chegada (positivos)
 for x, y in zip(df["Horário"], df["Chegada"]):
     if y > 0:
         anotacoes.append(dict(
             x=x, y=y,
             text=f"+{y}",
             showarrow=False,
-            yshift=15,
-            font=dict(color=cor_verde, size=14),
+            yshift=10,
+            font=dict(color=cor_verde, size=12),
             bordercolor=cor_verde,
             borderwidth=1,
             bgcolor="white",
-            opacity=1
+            opacity=0.9,
         ))
 
-# Rótulos de Saída
-for x, y in zip(df["Horário"], df["Saída"]):
-    if y > 0:
+# Rótulos Saída (negativos)
+for x, y in zip(df["Horário"], df["SaidaNeg"]):
+    if y < 0:
         anotacoes.append(dict(
             x=x, y=y,
-            text=f"-{y}",
+            text=f"{y}",  # já vem negativo
             showarrow=False,
-            yshift=15,
-            font=dict(color=cor_vermelho, size=14),
+            yshift=-10,
+            font=dict(color=cor_vermelho, size=12),
             bordercolor=cor_vermelho,
             borderwidth=1,
             bgcolor="white",
-            opacity=1
+            opacity=0.9,
         ))
 
-# Rótulos da Equipe
+# Rótulos Equipe (em cima da linha)
 for x, y_real, y_scaled in zip(df["Horário"], df["Equipe"], df["EquipeEscalada"]):
     if y_real > 0:
         anotacoes.append(dict(
@@ -237,26 +245,29 @@ for x, y_real, y_scaled in zip(df["Horário"], df["Equipe"], df["EquipeEscalada"
             text=str(y_real),
             showarrow=False,
             yshift=15,
-            font=dict(color=cor_roxo, size=14),
+            font=dict(color=cor_roxo, size=12),
             bordercolor=cor_roxo,
             borderwidth=1,
             bgcolor="white",
-            opacity=1,
+            opacity=0.9,
         ))
 
 fig.update_layout(annotations=anotacoes)
 
-# ---------- LAYOUT ----------
+# ===============================================================
+#                         LAYOUT
+# ===============================================================
+
 fig.update_layout(
     title="Produção × Equipe – Chegada / Saída / Equipe",
     xaxis_title="Horário",
-    yaxis_title="Toneladas | Equipe (escala)",
+    yaxis_title="Toneladas (Chegada / Saída) | Equipe (escala)",
     height=820,
     barmode="stack",
     hovermode="x unified",
     plot_bgcolor="white",
     paper_bgcolor="white",
-    bargap=0.15,
+    bargap=0.12,
     margin=dict(l=70, r=70, t=110, b=160),
     legend=dict(
         orientation="h",
@@ -268,6 +279,7 @@ fig.update_layout(
 )
 
 st.plotly_chart(fig, use_container_width=True)
+
 
 # ===============================================================
 #                       DOWNLOAD EXCEL
