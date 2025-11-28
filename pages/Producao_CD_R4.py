@@ -183,13 +183,8 @@ fig.add_trace(go.Bar(
     name="Chegada",
     marker_color=cor_verde,
     text=df["Chegada"].apply(lambda x: f"+{x}" if x > 0 else ""),
-    textposition="outside",             # <<< POSIÇÃO CORRETA
-    textfont=dict(
-        color="black",
-        size=16,
-        family="Arial",
-        weight="bold"
-    ),
+    textposition="outside",
+    textfont=dict(color="black", size=16, family="Arial", weight="bold"),
     hovertemplate="%{y} Ton<extra></extra>"
 ))
 
@@ -199,37 +194,26 @@ fig.add_trace(go.Bar(
     name="Saída",
     marker_color=cor_vermelho,
     text=df["Saída"].apply(lambda x: f"-{x}" if x > 0 else ""),
-    textposition="outside",             # <<< POSIÇÃO CORRETA
-    textfont=dict(
-        color="black",
-        size=16,
-        family="Arial",
-        weight="bold"
-    ),
+    textposition="outside",
+    textfont=dict(color="black", size=16, family="Arial", weight="bold"),
     hovertemplate="%{y} Ton<extra></extra>"
 ))
 
-# ---------- LINHA DA EQUIPE COM RÓTULO ----------
+# ---------- LINHA DA EQUIPE ----------
 fig.add_trace(go.Scatter(
     x=df["Horário"],
     y=df["EquipeEscalada"],
-    mode="lines+markers+text",          # <<< AGORA TEM TEXTO
+    mode="lines+markers+text",
     name="Equipe",
     line=dict(color=cor_roxo, width=4, dash="dot"),
     marker=dict(size=9, color=cor_roxo),
-    text=df["Equipe"],                  # <<< RÓTULO REAL DA EQUIPE
-    textposition="top center",          # <<< ACIMA DO PONTO
-    textfont=dict(
-        color="#6C3483",
-        size=17,
-        family="Arial",
-        weight="bold"
-    ),
+    text=df["Equipe"],
+    textposition="top center",
+    textfont=dict(color="#6C3483", size=17, family="Arial", weight="bold"),
     customdata=df["Equipe"],
     hovertemplate="Equipe: %{customdata}<extra></extra>"
 ))
 
-# ---------- LAYOUT ----------
 fig.update_layout(
     title="Produção × Equipe – Chegada / Saída / Equipe (Estilo Suave)",
     xaxis_title="Horário",
