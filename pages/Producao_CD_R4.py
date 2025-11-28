@@ -154,89 +154,117 @@ df["EquipeEscalada"] = df["Equipe"] * scale
 
 
 # ===============================================================
-#                GRÁFICO AJUSTADO DEFINITIVO
+#                       GRÁFICO (VISUAL AJUSTADO FINAL)
 # ===============================================================
 
-# Cores suaves exatas do modelo anterior
+fig = go.Figure()
+
+# Cores suaves
 cor_verde = "#90EE90"
 cor_vermelho = "#E74C3C"
 cor_roxo = "#9B59B6"
 
-# Fonte padrão
-fonte_padrao = dict(color="black", size=14, family="Arial")
-
-# Função para criar rótulo com caixa branca + borda colorida
-def estilo_rotulo(cor_borda):
-    return dict(
-        bgcolor="white",
-        bordercolor=cor_borda,
-        borderwidth=2,
-        font=dict(color=cor_borda, size=14, family="Arial")
-    )
-
-# ---------------------------------------------------------
-fig = go.Figure()
-
-# ----- Chegada -----
+# ---------- BARRAS ----------
 fig.add_trace(go.Bar(
-    x=df["Horário"], 
+    x=df["Horário"],
     y=df["Chegada"],
     name="Chegada",
     marker_color=cor_verde,
-    text=[f"+{v}" if v > 0 else "" for v in df["Chegada"]],
-    textposition="outside",
-    textfont=dict(color=cor_verde, size=14),
-    insidetextanchor="end",
-    texttemplate="<span style='color:%s;'><b>%{text}</b></span>" % cor_verde,
-    hovertemplate="%{y} Ton<extra></extra>"
+    hovertemplate="%{y} Ton<extra></extra>",
 ))
 
-# ----- Saída -----
 fig.add_trace(go.Bar(
-    x=df["Horário"], 
+    x=df["Horário"],
     y=df["Saída"],
     name="Saída",
     marker_color=cor_vermelho,
-    text=[f"-{v}" if v > 0 else "" for v in df["Saída"]],
-    textposition="outside",
-    textfont=dict(color=cor_vermelho, size=14),
-    texttemplate="<span style='color:%s;'><b>%{text}</b></span>" % cor_vermelho,
-    hovertemplate="%{y} Ton<extra></extra>"
+    hovertemplate="%{y} Ton<extra></extra>",
 ))
 
-# ----- Linha da Equipe -----
+# ---------- LINHA DA EQUIPE ----------
 fig.add_trace(go.Scatter(
     x=df["Horário"],
     y=df["EquipeEscalada"],
-    mode="lines+markers+text",
+    mode="lines+markers",
     name="Equipe",
-    line=dict(color=cor_roxo, width=4, dash="dot"),
-    marker=dict(size=9, color=cor_roxo),
-    text=df["Equipe"].astype(str),
-    textposition="top center",
-    textfont=dict(color=cor_roxo, size=14),
-    hovertemplate="Equipe: %{text}<extra></extra>"
+    line=dict(color=cor_roxo, width=3),
+    marker=dict(size=7, color=cor_roxo),
+    hovertemplate="Equipe: %{customdata}<extra></extra>",
+    customdata=df["Equipe"]
 ))
 
-# ----- Layout -----
+# ===============================================================
+#                ANOTAÇÕES (RÓTULOS COLORIDOS)
+# ===============================================================
+
+anotacoes = []
+
+# Rótulos de Chegada
+for x, y in zip(df["Horário"], df["Chegada"]):
+    if y > 0:
+        anotacoes.append(dict(
+            x=x, y=y,
+            text=f"+{y}",
+            showarrow=False,
+            yshift=15,
+            font=dict(color=cor_verde, size=14),
+            bordercolor=cor_verde,
+            borderwidth=1,
+            bgcolor="white",
+            opacity=1
+        ))
+
+# Rótulos de Saída
+for x, y in zip(df["Horário"], df["Saída"]):
+    if y > 0:
+        anotacoes.append(dict(
+            x=x, y=y,
+            text=f"-{y}",
+            showarrow=False,
+            yshift=15,
+            font=dict(color=cor_vermelho, size=14),
+            bordercolor=cor_vermelho,
+            borderwidth=1,
+            bgcolor="white",
+            opacity=1
+        ))
+
+# Rótulos da Equipe
+for x, y_real, y_scaled in zip(df["Horário"], df["Equipe"], df["EquipeEscalada"]):
+    if y_real > 0:
+        anotacoes.append(dict(
+            x=x, y=y_scaled,
+            text=str(y_real),
+            showarrow=False,
+            yshift=15,
+            font=dict(color=cor_roxo, size=14),
+            bordercolor=cor_roxo,
+            borderwidth=1,
+            bgcolor="white",
+            opacity=1,
+        ))
+
+fig.update_layout(annotations=anotacoes)
+
+# ---------- LAYOUT ----------
 fig.update_layout(
     title="Produção × Equipe – Chegada / Saída / Equipe",
     xaxis_title="Horário",
-    yaxis_title="Toneladas | Equipe (Escalada)",
-    height=780,
+    yaxis_title="Toneladas | Equipe (escala)",
+    height=820,
     barmode="stack",
+    hovermode="x unified",
     plot_bgcolor="white",
     paper_bgcolor="white",
-    bargap=0.17,
-    font=fonte_padrao,
+    bargap=0.15,
+    margin=dict(l=70, r=70, t=110, b=160),
     legend=dict(
         orientation="h",
-        yanchor="bottom",
-        y=-0.2,
+        yanchor="top",
+        y=-0.18,
         xanchor="center",
         x=0.5
     ),
-    margin=dict(l=70, r=70, t=100, b=160)
 )
 
 st.plotly_chart(fig, use_container_width=True)
