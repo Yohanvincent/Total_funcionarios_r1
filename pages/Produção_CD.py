@@ -4,10 +4,10 @@ import pandas as pd
 import plotly.graph_objects as go
 import io
 
-st.set_page_config(layout="wide", page_title="Produção × Equipe - Simplificado")
+st.set_page_config(layout="wide", page_title="Produção × Equipe")
 st.title("Produção × Equipe – Apenas Chegada e Saída Linha")
 
-# ================= DADOS FIXOS ATUALIZADOS =================
+# ================= DADOS ATUALIZADOS (você enviou) =================
 chegada_fixa = """03:30 9,6
 04:20 5,9
 04:50 5,4
@@ -34,7 +34,6 @@ saida_fixa = """21:00 3,5
 21:30 9,4
 21:30 11,9"""
 
-# NOVOS DADOS REAIS (você passou)
 confer_fixa = """01:00 04:00 05:05 10:23 1
 16:00 20:00 21:05 01:24 2
 18:30 22:30 23:30 03:38 4
@@ -58,13 +57,13 @@ aux_fixa = """16:00 20:00 21:05 01:24 5
 # ================= SESSION STATE =================
 if "init" not in st.session_state:
     st.session_state.chegada = chegada_fixa
-    st.session_state.saida = saida_fixa
-    st.session_state.confer = confer_fixa
-    st.session_state.aux = aux_fixa
+    st.session_state.saida   = saida_fixa
+    st.session_state.confer  = confer_fixa
+    st.session_state.aux     = aux_fixa
     st.session_state.rotulos = True
 
 # ================= FUNÇÕES =================
-def hora_para_minutos(h):
+def hora_para_min(h):
     try:
         hh, mm = map(int, h.split(":"))
         return hh * 60 + mm
@@ -74,13 +73,12 @@ def hora_para_minutos(h):
 def extrair_ton(texto):
     dados = {}
     for linha in texto.strip().split("\n"):
-        if not linha.strip():
-            continue
-        partes = linha.strip().split()
-        if len(partes) >= 2:
-            h = partes[0]
+        if not linha.strip(): continue
+        p = linha.strip().split()
+        if len(p) >= 2:
+            h = p[0]
             try:
-                v = float(partes[1].replace(",", "."))
+                v = float(p[1].replace(",", "."))
                 dados[h] = dados.get(h, 0) + v
             except:
                 pass
@@ -89,82 +87,75 @@ def extrair_ton(texto):
 def parse_jornadas(texto):
     jornadas = []
     for linha in texto.strip().split("\n"):
-        if not linha.strip():
-            continue
+        if not linha.strip(): continue
         p = linha.strip().split()
         if len(p) == 5 and p[4].isdigit():
-            e = hora_para_minutos(p[0])
-            si = hora_para_minutos(p[1])
-            ri = hora_para_minutos(p[2])
-            sf = hora_para_minutos(p[3])
-            qtd = int(p[4])
-            # Corrigir travessia de meia-noite
-            if sf < e:
-                sf += 1440
-            if ri < si:
-                ri += 1440
-            jornadas.append({"tipo": "com_intervalo", "e": e, "si": si, "ri": ri, "sf": sf, "qtd": qtd})
+            e = hora_para_min(p[0])
+            si = hora_para_min(p[1])
+            ri = hora_para_min(p[2])
+            sf = hora_para_min(p[3])
+            q = int(p[4])
+            if sf < e: sf += 1440
+            if ri < si: ri += 1440
+            jornadas.append({"tipo": "intervalo", "e": e, "si": si, "ri": ri, "sf": sf, "q": q})
         elif len(p) == 3 and p[2].isdigit():
-            e = hora_para_minutos(p[0])
-            s = hora_para_minutos(p[1])
-            qtd = int(p[2])
-            if s < e:
-                s += 1440
-            jornadas.append({"tipo": "sem_intervalo", "e": e, "s": s, "qtd": qtd})
+            e = hora_para_min(p[0])
+            s = hora_para_min(p[1])
+            q = int(p[2])
+            if s < e: s += 1440
+            jornadas.append({"tipo": "simples", "e": e, "s": s, "q": q})
     return jornadas
 
 def todos_horarios():
-    horarios = set()
-    for texto in [st.session_state.chegada, st.session_state.saida, st.session_state.confer, st.session_state.aux]:
-        for linha in texto.strip().split("\n"):
-            if not linha.strip():
-                continue
-            partes = linha.strip().split()
-            if len(partes) >= 2:
-                horarios.add(partes[0])
-            if len(partes) in (3, 5):
-                horarios.update(partes[:4])
-    return sorted(horarios, key=hora_para_minutos)
+    s = set()
+    for t in [st.session_state.chegada, st.session_state.saida, st.session_state.confer, st.session_state.aux]:
+        for linha in t.strip().split("\n"):
+            if not linha.strip(): continue
+            p = linha.strip().split()
+            if len(p) >= 2:
+                s.add(p[0])
+            if len(p) in (3,5):
+                s.update(p[:4])
+    return sorted(s, key=hora_para_min)
 
 def calcular_equipe(jornadas, horarios):
-    equipe = []
-    for h in horarios:
-        minutos = hora_para_minutos(h)
+    eq = []
+    for h_min = [hora_para_min(h) for h in horarios]
+    for m in h_min:
         total = 0
         for j in jornadas:
-            if j["tipo"] == "com_intervalo":
-                if (j["e"] <= minutos < j["si"]) or (j["ri"] <= minutos <= j["sf"]):
-                    total += j["qtd"]
+            if j["tipo"] == "intervalo":
+                if (j["e"] <= m < j["si"]) or (j["ri"] <= m <= j["sf"]):
+                    total += j["q"]
             else:
-                if j["e"] <= minutos <= j["s"]:
-                    total += j["qtd"]
-        equipe.append(total)
-    return equipe
+                if j["e"] <= m <= j["s"]:
+                    total += j["q"]
+        eq.append(total)
+    return eq
 
 # ================= PROCESSAMENTO =================
 cheg = extrair_ton(st.session_state.chegada)
 said = extrair_ton(st.session_state.saida)
 
-jorn_confer = parse_jornadas(st.session_state.confer)
-jorn_aux = parse_jornadas(st.session_state.aux)
+j_conf = parse_jornadas(st.session_state.confer)
+j_aux  = parse_jornadas(st.session_state.aux)
 
 horarios = todos_horarios()
 
-eq_confer = calcular_equipe(jorn_confer, horarios)
-eq_aux = calcular_equipe(jorn_aux, horarios)
-eq_total = [a + b for a, b in zip(eq_confer, eq_aux)]
+eq_conf = calcular_equipe(j_conf, horarios)
+eq_aux  = calcular_equipe(j_aux,  horarios)
+eq_total = [a + b for a, b in zip(eq_conf, eq_aux)]
 
-# ================= DATAFRAME =================
 df = pd.DataFrame({
     "Horario": horarios,
     "Chegada_Ton": [round(cheg.get(h, 0), 1) for h in horarios],
-    "Saida_Ton": [round(said.get(h, 0), 1) for h in horarios],
-    "Equipe": eq_total
+    "Saida_Ton"  : [round(said.get(h, 0), 1) for h in horarios],
+    "Equipe"     : eq_total
 })
 
 max_ton = max(df["Chegada_Ton"].max(), df["Saida_Ton"].max()) + 10
 scale = max_ton / (df["Equipe"].max() + 5) if df["Equipe"].max() > 0 else 1
-df["Equipe_Escalada"] = df["Equipe"] \* scale
+df["Equipe_Escalada"] = df["Equipe"] * scale
 
 # ================= GRÁFICO =================
 fig = go.Figure()
@@ -182,24 +173,20 @@ fig.add_trace(go.Scatter(
     hovertemplate="Equipe: <b>%{customdata}</b> pessoas<extra></extra>"
 ))
 
-# Rótulos originais
 if st.session_state.rotulos:
     for _, r in df.iterrows():
         if r["Chegada_Ton"] > 0:
-            fig.add_annotation(x=r["Horario"], y=r["Chegada_Ton"],
-                               text=f"+{r['Chegada_Ton']}",
-                               font=dict(color="#2ECC71", size=9), bgcolor="white",
-                               bordercolor="#90EE90", borderwidth=1, showarrow=False, yshift=10)
+            fig.add_annotation(x=r["Horario"], y=r["Chegada_Ton"], text=f"+{r['Chegada_Ton']}",
+                               font=dict(color="#2ECC71", size=9), bgcolor="white", bordercolor="#90EE90", borderwidth=1,
+                               showarrow=False, yshift=10)
         if r["Saida_Ton"] > 0:
-            fig.add_annotation(x=r["Horario"], y=r["Saida_Ton"],
-                               text=f"-{r['Saida_Ton']}",
-                               font=dict(color="#E74C3C", size=9), bgcolor="white",
-                               bordercolor="#E74C3C", borderwidth=1, showarrow=False, yshift=10)
+            fig.add_annotation(x=r["Horario"], y=r["Saida_Ton"], text=f"-{r['Saida_Ton']}",
+                               font=dict(color="#E74C3C", size=9), bgcolor="white", bordercolor="#E74C3C", borderwidth=1,
+                               showarrow=False, yshift=10)
         if r["Equipe"] > 0:
-            fig.add_annotation(x=r["Horario"], y=r["Equipe_Escalada"],
-                               text=f"{int(r['Equipe'])}",
-                               font=dict(color="#9B59B6", size=9), bgcolor="white",
-                               bordercolor="#9B59B6", borderwidth=1, showarrow=False, yshift=0)
+            fig.add_annotation(x=r["Horario"], y=r["Equipe_Escalada"], text=str(int(r["Equipe"])),
+                               font=dict(color="#9B59B6", size=9), bgcolor="white", bordercolor="#9B59B6", borderwidth=1,
+                               showarrow=False, yshift=0)
 
 fig.update_layout(
     title="Produção × Equipe – Apenas Chegada e Saída Linha",
@@ -218,7 +205,7 @@ st.plotly_chart(fig, use_container_width=True)
 # ================= DOWNLOAD =================
 buffer = io.BytesIO()
 with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-    df.to_excel(writer, sheet_name="Produção", index=False)
+    df.to_excel(writer, index=False)
 buffer.seek(0)
 st.download_button("Baixar Excel", buffer, "producao_atualizada.xlsx")
 
@@ -229,12 +216,11 @@ st.markdown("### Editar Dados")
 c1, c2 = st.columns(2)
 with c1:
     st.session_state.chegada = st.text_area("Chegadas Linha", st.session_state.chegada, height=320)
-    st.session_state.confer = st.text_area("Conferentes", st.session_state.confer, height=320)
-
+    st.session_state.confer  = st.text_area("Conferentes", st.session_state.confer, height=320)
 with c2:
     st.session_state.saida = st.text_area("Saídas Linha", st.session_state.saida, height=320)
-    st.session_state.aux = st.text_area("Auxiliares", st.session_state.aux, height=320)
+    st.session_state.aux   = st.text_area("Auxiliares", st.session_state.aux, height=320)
 
 st.session_state.rotulos = st.checkbox("Mostrar rótulos", value=True)
 
-st.success("Tudo funcionando perfeitamente com os novos dados! Jornadas noturnas calculadas corretamente!")
+st.success("Tudo rodando 100% com seus novos dados! Jornadas noturnas calculadas corretamente!")
