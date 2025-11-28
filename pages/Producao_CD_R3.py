@@ -171,26 +171,70 @@ fig = go.Figure()
 
 # ---------- BARRAS EMPILHADAS ----------
 
-# Chegada (verde)
+# Chegada (verde claro)
 fig.add_trace(go.Bar(
     x=df["Horário"], 
     y=df["Chegada"],
     name="Chegada",
-    marker_color="#2ECC71",
+    marker_color="#90EE90",
     text=df["Chegada"].apply(lambda x: f"+{x}" if x > 0 else ""),
-    textposition="outside"
+    textposition="inside",
+    insidetextanchor="middle",
+    textfont=dict(color="black"),
+    insidetextfont=dict(color="black"),
+    # Caixinha do rótulo
+    hovertemplate="%{y} Ton<extra></extra>"
 ))
 
-# Saída (vermelho)
+# Saída (vermelho suave)
 fig.add_trace(go.Bar(
     x=df["Horário"], 
     y=df["Saída"],
     name="Saída",
-    marker_color="#E74C3C",
+    marker_color="#FF847C",
     text=df["Saída"].apply(lambda x: f"-{x}" if x > 0 else ""),
     textposition="inside",
-    insidetextanchor="middle"
+    insidetextanchor="middle",
+    textfont=dict(color="black"),
+    insidetextfont=dict(color="black"),
+    hovertemplate="%{y} Ton<extra></extra>"
 ))
+
+# ---------- LINHA DA EQUIPE ----------
+fig.add_trace(go.Scatter(
+    x=df["Horário"],
+    y=df["EquipeEscalada"],
+    mode="lines+markers",
+    name="Equipe",
+    line=dict(color="#C39BD3", width=4, dash="dot"),
+    marker=dict(size=9, color="#C39BD3"),
+    customdata=df["Equipe"],
+    hovertemplate="Equipe: %{customdata}<extra></extra>"
+))
+
+# ---------- LAYOUT ----------
+fig.update_layout(
+    title="Produção × Equipe – Chegada / Saída / Equipe",
+    xaxis_title="Horário",
+    yaxis_title="Toneladas | Equipe (escalada)",
+    height=820,
+    barmode="stack",
+    hovermode="x unified",
+    plot_bgcolor="white",
+    paper_bgcolor="white",
+    bargap=0.15,
+    legend=dict(
+        orientation="h",
+        yanchor="top",
+        y=-0.18,
+        xanchor="center",
+        x=0.5,
+        bgcolor="rgba(255,255,255,0.95)",
+        bordercolor="#ccc",
+        borderwidth=1
+    ),
+    margin=dict(l=70, r=70, t=110, b=160)
+)
 
 # ---------- LINHA DA EQUIPE ----------
 fig.add_trace(go.Scatter(
