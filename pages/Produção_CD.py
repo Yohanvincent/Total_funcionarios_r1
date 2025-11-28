@@ -4,10 +4,10 @@ import pandas as pd
 import plotly.graph_objects as go
 import io
 
-st.set_page_config(layout="wide", page_title="Produção vs Equipe - Simplificado")
-st.title("Produção × Equipe – Apenas Chegada e Saída Carregada")
+st.set_page_config(layout="wide", page_title="Produção × Equipe - Simplificado")
+st.title("Produção × Equipe – Apenas Chegada e Saída Linha")
 
-# ================= DADOS FIXOS (iguais ao original) =================
+# ================= DADOS FIXOS (apenas o necessário) =================
 chegada_fixa = """03:30 9,6
 04:20 5,9
 04:50 5,4
@@ -34,25 +34,6 @@ saida_fixa = """21:00 3,5
 21:30 9,4
 21:30 11,9"""
 
-entrega_fixa = """07:40 3,0
-08:00 7,0
-08:10 9,0
-08:20 10
-08:20 12,2
-09:00 15,2
-14:00 8,6
-14:00 7,5
-14:00 7,0
-14:20 3,0"""
-
-coleta_fixa = """18:00 20,5
-18:15 10,2
-18:30 8
-18:45 17,6
-19:00 7,5
-19:15 9,3
-19:30 10"""
-
 confer_fixa = """03:30 08:00 09:12 13:18 15
 06:00 11:00 12:15 16:03 1
 07:00 12:00 13:12 17:00 1
@@ -67,51 +48,50 @@ aux_fixa = """03:30 07:18 3
 12:30 16:00 17:15 22:28 5
 18:30 22:26 18"""
 
-# ================= SESSION STATE (igual ao original) =================
-if "init" not in st.session_state:
-    st.session_state.init = True
-    st.session_state.nova_chegada = chegada_fixa
-    st.session_state.nova_saida = saida_fixa
-    st.session_state.entrega_input = entrega_fixa
-    st.session_state.coleta_input = coleta_fixa
-    st.session_state.nova_confer = confer_fixa
-    st.session_state.nova_aux = aux_fixa
+# ================= SESSION STATE =================
+if "simp" not in st.session_state:
+    st.session_state.simp = True
+    st.session_state.chegada = chegada_fixa
+    st.session_state.saida = saida_fixa
+    st.session_state.confer = confer_fixa
+    st.session_state.aux = aux_fixa
     st.session_state.rotulos = True
 
 # ================= PROCESSAMENTO =================
-chegada_txt   = st.session_state.nova_chegada
-saida_txt     = st.session_state.nova_saida
-confer_txt    = st.session_state.nova_confer
-aux_txt       = st.session_state.nova_aux
-rotulos       = st.session_state.rotulos
+chegada_txt = st.session_state.chegada
+saida_txt   = st.session_state.saida
+confer_txt  = st.session_state.confer
+aux_txt     = st.session_state.aux
+rotulos     = st.session_state.rotulos
 
-# --- Extrai apenas Chegada e Saída ---
-def extrair_producao(texto):
+# --- Extrai Chegada e Saída ---
+def extrair_ton(texto):
     dados = {}
-    for l in texto.strip().split("\n"):
-        p = l.strip().split()
+    for linha in texto.strip().split("\n"):
+        if not linha.strip(): continue
+        p = linha.strip().split()
         if len(p) >= 2:
             h = p[0]
             try: dados[h] = dados.get(h, 0) + float(p[1].replace(",", "."))
             except: pass
     return dados
 
-cheg = extrair_producao(chegada_txt)
-said = extrair_producao(saida_txt)
+cheg = extrair_ton(chegada_txt)
+said = extrair_ton(saida_txt)
 
-# --- Jornadas (igual ao original) ---
+# --- Funções de jornada (iguais ao original) ---
 def jornadas(t):
     j = []
     for l in t.strip().split("\n"):
         p = l.strip().split()
-        if len(p)==5 and p[4].isdigit():
+        if len(p) == 5 and p[4].isdigit():
             j.append({"t":"c","e":p[0],"si":p[1],"ri":p[2],"sf":p[3],"q":int(p[4])})
-        elif len(p)==3 and p[2].isdigit():
+        elif len(p) == 3 and p[2].isdigit():
             j.append({"t":"m","e":p[0],"sf":p[1],"q":int(p[2])})
     return j
 
 def min_hora(h):
-    try: hh,mm = map(int,h.split(":")); return hh*60 + mm
+    try: return int(h.split(":")[0])*60 + int(h.split(":")[1])
     except: return 0
 
 def todos_horarios(*texts):
@@ -123,42 +103,44 @@ def todos_horarios(*texts):
             if len(p) in (3,5): s.update(p[:-1])
     return sorted(s, key=min_hora)
 
+horarios = todos_horarios(chegada_txt, saida_txt, confer_txt, aux_txt)
 jorn_conf = jornadas(confer_txt)
 jorn_aux  = jornadas(aux_txt)
-horarios = todos_horarios(chegada_txt, saida_txt, confer_txt, aux_txt)
 
 def calcular_equipe(jlist, hrs):
     tl = [min_hora(h) for h in hrs]
-    eq = [0]*len(tl)
+    eq = [0] * len(tl)
     for j in jlist:
         e = min_hora(j["e"])
-        if j["t"]=="c":
+        if j["t"] == "c":
             si = min_hora(j["si"])
             ri = min_hora(j["ri"])
             sf = min_hora(j["sf"])
-            for i,t in enumerate(tl):
-                if (e<=t<si) or (ri<=t<=sf): eq[i] += j["q"]
+            for i, t in enumerate(tl):
+                if (e <= t < si) or (ri <= t <= sf):
+                    eq[i] += j["q"]
         else:
             sf = min_hora(j["sf"])
-            for i,t in enumerate(tl):
-                if e<=t<=sf: eq[i] += j["q"]
+            for i, t in enumerate(tl):
+                if e <= t <= sf:
+                    eq[i] += j["q"]
     return eq
 
-eq_total = [a+b for a,b in zip(calcular_equipe(jorn_conf,horarios), calcular_equipe(jorn_aux,horarios))]
+eq_total = [a + b for a, b in zip(calcular_equipe(jorn_conf, horarios), calcular_equipe(jorn_aux, horarios))]
 
-# ================= DATAFRAME SIMPLIFICADO (só Chegada, Saída e Equipe) =================
+# ================= DATAFRAME =================
 df = pd.DataFrame({
     "Horario": horarios,
-    "Chegada_Ton": [round(cheg.get(h,0),1) for h in horarios],
-    "Saida_Ton"  : [round(said.get(h,0),1) for h in horarios],
-    "Equipe"     : eq_total
+    "Chegada_Ton": [round(cheg.get(h, 0), 1) for h in horarios],
+    "Saida_Ton":   [round(said.get(h, 0), 1) for h in horarios],
+    "Equipe":      eq_total
 })
 
 max_ton = max(df["Chegada_Ton"].max(), df["Saida_Ton"].max()) + 10
 scale = max_ton / (df["Equipe"].max() + 5) if df["Equipe"].max() > 0 else 1
 df["Equipe_Escalada"] = df["Equipe"] * scale
 
-# ================= GRÁFICO – 100% COMO O ORIGINAL (sem entrega/coleta) =================
+# ================= GRÁFICO LIMPO =================
 fig = go.Figure()
 
 fig.add_trace(go.Bar(x=df["Horario"], y=df["Chegada_Ton"], name="Chegada", marker_color="#90EE90", opacity=0.8))
@@ -166,14 +148,15 @@ fig.add_trace(go.Bar(x=df["Horario"], y=df["Saida_Ton"], name="Saída Carregada"
 
 fig.add_trace(go.Scatter(
     x=df["Horario"], y=df["Equipe_Escalada"],
-    mode="lines+markers", name="Equipe",
+    mode="lines+markers",
+    name="Equipe",
     line=dict(color="#9B59B6", width=4, dash="dot"),
     marker=dict(size=8),
     customdata=df["Equipe"],
     hovertemplate="Equipe: %{customdata}<extra></extra>"
 ))
 
-# RÓTULOS 100% IGUAIS AO ORIGINAL
+# Rótulos exatamente como no original
 if rotulos:
     for _, r in df.iterrows():
         if r["Chegada_Ton"] > 0:
@@ -185,13 +168,12 @@ if rotulos:
                                font=dict(color="#E74C3C", size=9), bgcolor="white", bordercolor="#E74C3C", borderwidth=1,
                                showarrow=False, yshift=10)
         if r["Equipe"] > 0:
-            fig.add_annotation(x=r["Horario"], y=r["Equipe_Escalada"],
-                               text=f"{int(r['Equipe'])}",
+            fig.add_annotation(x=r["Horario"], y=r["Equipe_Escalada"], text=f"{int(r['Equipe'])}",
                                font=dict(color="#9B59B6", size=9), bgcolor="white", bordercolor="#9B59B6", borderwidth=1,
                                showarrow=False, yshift=0)
 
 fig.update_layout(
-    title="Produção × Equipe – Apenas Chegada e Saída Carregada",
+    title="Produção × Equipe – Apenas Chegada e Saída Linha",
     xaxis_title="Horário",
     yaxis=dict(title="Toneladas | Equipe (escalada)", range=[0, max_ton * 1.2]),
     height=750,
@@ -199,14 +181,11 @@ fig.update_layout(
     hovermode="x unified",
     legend=dict(
         orientation="h",
-        yanchor="top",
-        y=-0.18,
-        xanchor="center",
-        x=0.5,
+        yanchor="top", y=-0.18,
+        xanchor="center", x=0.5,
         font=dict(size=12),
         bgcolor="rgba(255,255,255,0.95)",
-        bordercolor="#cccccc",
-        borderwidth=1
+        bordercolor="#ccc", borderwidth=1
     ),
     margin=dict(l=60, r=60, t=100, b=140)
 )
@@ -216,29 +195,23 @@ st.plotly_chart(fig, use_container_width=True)
 # ================= DOWNLOAD =================
 buffer = io.BytesIO()
 with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-    df.to_excel(writer, sheet_name="Dados_Simplificado", index=False)
+    df.to_excel(writer, sheet_name="Produção Simplificada", index=False)
 buffer.seek(0)
-st.download_button("Baixar Excel (Apenas Chegada + Saída)", buffer, "producao_simplificada.xlsx")
+st.download_button("Baixar Excel", buffer, "producao_simplificada.xlsx")
 
-# ================= INPUTS – TODAS AS CAIXINHAS MANTIDAS =================
+# ================= INPUTS – SÓ OS 4 CAMPOS QUE VOCÊ QUER =================
 st.markdown("---")
-st.markdown("### ✏️ Editar Dados (opcional – substitui os fixos)")
+st.markdown("### Editar Dados")
 
-c1, c2, c3 = st.columns([2,2,2])
-
+c1, c2 = st.columns(2)
 with c1:
-    st.session_state.nova_chegada = st.text_area("Chegadas (horário tonelada)", value=chegada_fixa, height=220, key="ch")
-    st.session_state.nova_confer = st.text_area("Conferentes", value=confer_fixa, height=220, key="cf")
+    st.session_state.chegada = st.text_area("Chegadas Linha (horário tonelada)", chegada_fixa, height=300)
+    st.session_state.confer   = st.text_area("Conferentes (jornada)", confer_fixa, height=300)
 
 with c2:
-    st.session_state.nova_saida = st.text_area("Saídas (horário tonelada)", value=saida_fixa, height=220, key="sd")
-    st.session_state.nova_aux = st.text_area("Auxiliares", value=aux_fixa, height=220, key="au")
+    st.session_state.saida = st.text_area("Saídas Linha (horário tonelada)", saida_fixa, height=300)
+    st.session_state.aux   = st.text_area("Auxiliares (jornada)", aux_fixa, height=300)
 
-with c3:
-    st.markdown("#### Saída para Entrega (hora + ton)")
-    st.session_state.entrega_input = st.text_area("", value=entrega_fixa, height=220, key="ent")
-    st.markdown("#### Retorno de Coleta (hora + ton)")
-    st.session_state.coleta_input = st.text_area("", value=coleta_fixa, height=220, key="col")
-    st.session_state.rotulos = st.checkbox("Rótulos", value=True)
+st.session_state.rotulos = st.checkbox("Mostrar rótulos", value=True)
 
-st.success("Versão simplificada pronta! Apenas Chegada e Saída no gráfico, todas as caixinhas mantidas e rótulos 100% originais!")
+st.success("Versão simplificada final! Apenas Chegada, Saída Linha e Equipe – sem Entrega nem Coleta!")
